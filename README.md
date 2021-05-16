@@ -34,7 +34,7 @@ Use the package manager [pip](https://pip.pypa.io/en/stable/) to install constru
 ```bash
 pip install construct==2.10.56
 ```
-Alternatively, you can use the windows standalone executable. 
+Alternatively, you can use the Windows standalone executable. 
 
 ## Usage
 ```bash
