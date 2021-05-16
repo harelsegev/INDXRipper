@@ -30,6 +30,7 @@ These are pretty standard but here's a list anyways
 * all times outputted are UTC times
 
 ## Installation 
+Python 3.8 or above is required.  
 Use the package manager [pip](https://pip.pypa.io/en/stable/) to install construct.
 ```bash
 pip install construct==2.10.56
