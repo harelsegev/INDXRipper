@@ -1,6 +1,10 @@
 # INDXRipper
 Find index entries in $INDEX_ALLOCATION attributes
 
+![screenshot](https://user-images.githubusercontent.com/84273110/118458300-42e4ae00-b703-11eb-8e59-bcb9de00ca89.png)
+
+Timeline created using mactime.pl on the combined output of INDXRipper and fls.  
+See: [sleuthkit](https://github.com/sleuthkit/sleuthkit)
 ## Motivation
 $INDEX_ALLOCATION attributes are used by NTFS directories to store index entries for the files in the directory.
 
