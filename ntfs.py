@@ -133,10 +133,6 @@ FILENAME_ATTRIBUTE = Struct(
     "FilenameInUnicode" / PaddedString(lambda this: this.FilenameLengthInCharacters * 2, "utf16")
 )
 
-
-SYSTEM_PARTITION = r"\\.\C:"
-ROOT_RECORD_INDEX = 5
-START_OF_USER_FILES = 16
 NUM_OF_FIXUP_BYTES = 2
 
 
