@@ -30,7 +30,7 @@ These are pretty standard but here's a list anyways
 * Supports unicode filenames
 * Index entries from orphan directories are listed under "/$Orphan"
 * Provides bodyfile output for supertimeline creation
-* Works on live windows systems using the "\\\\.\\\" notation
+* Works on live Windows NTFS drives, using the "\\\\.\\\" notation
 * All times outputted are UTC times
 
 ## Installation 
@@ -43,15 +43,16 @@ Alternatively, you can use the Windows standalone executable.
 
 ## Usage
 ```bash
-# process dead disk image, get all index entries
+# process dead partition image, get all index entries
 python INDXRipper.py ntfs.part.001 output.csv
 
-# process live system, slack space only, bodyfile output, append "C:" to all the paths
-python INDXRipper.py -m C: --slack-only --bodyfile \\.\C: output.bodyfile
+# process the D: drive, slack space only, bodyfile output, append "D:" to all the paths
+python INDXRipper.py -m D: --slack-only --bodyfile \\.\D: output.bodyfile
 ```
 
 ## Limitations
-Entries that are partially overitten may not be found. If they are found, though, the tool may give you false information
+* The tool may give false results.
+* Entries that are partially overitten may not be found. If they are found, though, the tool may give you false information.
 
 ### What this tool doesn't do
 * This tool doesn't process $INDEX_ROOT attributes. You won't see an output for every file on the volume
