@@ -147,10 +147,7 @@ def get_timestamps(filename_attribute, out_bodyfile):
 
 
 def concatenate(parent_path, filename_attribute):
-    full_path = f"{parent_path}/{filename_attribute['FilenameInUnicode']}"
-    if filename_attribute["FilenameLengthInCharacters"] == 0:
-        full_path += "(NO NAME)"
-    return full_path
+    return f"{parent_path}/{filename_attribute['FilenameInUnicode']}"
 
 
 def get_output_by_format(full_path, size, allocated_size, a_time, m_time, c_time, cr_time, out_bodyfile):
@@ -163,10 +160,16 @@ def get_output_by_format(full_path, size, allocated_size, a_time, m_time, c_time
 def get_record_output(filename_attributes, parent_path, out_bodyfile):
     lines = list()
     for filename_attribute in filename_attributes:
+        if not filename_attribute["FilenameLengthInCharacters"]:
+            continue
+
+        try:
+            a_time, c_time, m_time, cr_time = get_timestamps(filename_attribute, out_bodyfile)
+        except OverflowError:
+            continue
+
         full_path = concatenate(parent_path, filename_attribute)
         size, alloc_size = filename_attribute["RealSize"], filename_attribute["AllocatedSize"]
-        a_time, c_time, m_time, cr_time = get_timestamps(filename_attribute, out_bodyfile)
-
         lines.append(get_output_by_format(full_path, size, alloc_size, a_time, m_time, cr_time, cr_time, out_bodyfile))
 
     return lines
@@ -185,10 +188,10 @@ def get_output_lines(mft_dict, vbr, root_name, out_bodyfile, slack_only):
 
     for key in mft_dict:
         if index_allocation := mft_dict[key]["INDEX_ALLOCATION"]:
-            parent_path = get_path(mft_dict, key, cache, root_name)
             filename_attributes = find_index_entries(index_allocation, *key, vbr, slack_only)
 
             if filename_attributes is not None:
+                parent_path = get_path(mft_dict, key, cache, root_name)
                 lines += get_record_output(filename_attributes, parent_path, out_bodyfile)
     return lines
 
