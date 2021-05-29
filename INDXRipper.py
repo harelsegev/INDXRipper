@@ -9,6 +9,10 @@ import argparse
 from datetime import datetime, timedelta, timezone
 
 
+class EmptyNameInFilenameAttribute(ValueError):
+    pass
+
+
 def get_arguments():
     parser = argparse.ArgumentParser(prog="INDXRipper",
                                      description="find index entries in $INDEX_ALLOCATION attributes")
@@ -16,7 +20,8 @@ def get_arguments():
     parser.add_argument("outfile", metavar="outfile", help=r"output file path")
     parser.add_argument("-m", metavar="MOUNT_POINT", default="",
                         help="a name to display as the mount point of the image, e.g., C:")
-    parser.add_argument("--slack-only", action="store_true", help="display entries in slack space only ")
+    parser.add_argument("--deleted-only", action="store_true",
+                        help="only display entries with an invalid file reference")
     parser.add_argument("--bodyfile", action="store_true", help="bodyfile output. default is CSV")
     return parser.parse_args()
 
@@ -65,10 +70,9 @@ def get_index_allocation_attribute(vbr, raw_partition, mft_cluster, record_heade
 
 
 def get_mft_dict_values(vbr, raw_partition, mft_cluster, record_header):
-    if is_directory(record_header):
-        values = get_filename_attribute_values(mft_cluster, record_header)
-        values["INDEX_ALLOCATION"] = get_index_allocation_attribute(vbr, raw_partition, mft_cluster, record_header)
-        return values
+    values = get_filename_attribute_values(mft_cluster, record_header)
+    values["INDEX_ALLOCATION"] = get_index_allocation_attribute(vbr, raw_partition, mft_cluster, record_header)
+    return values
 
 
 def get_mft_records(mft_data, vbr):
@@ -150,27 +154,34 @@ def concatenate(parent_path, filename_attribute):
     return f"{parent_path}/{filename_attribute['FilenameInUnicode']}"
 
 
-def get_output_by_format(full_path, size, allocated_size, a_time, m_time, c_time, cr_time, out_bodyfile):
+def get_output_by_format(filename_attribute, parent_path, index, out_bodyfile):
+    if not filename_attribute["FilenameLengthInCharacters"]:
+        raise EmptyNameInFilenameAttribute
+
+    full_path = concatenate(parent_path, filename_attribute)
+    size, alloc_size = filename_attribute["RealSize"], filename_attribute["AllocatedSize"]
+    a_time, c_time, m_time, cr_time = get_timestamps(filename_attribute, out_bodyfile)
+
     if out_bodyfile:
-        return f"0|{full_path} ($I30)|0|------------|0|0|{size}|{a_time}|{m_time}|{c_time}|{cr_time}\n"
+        return f"0|{full_path} ($I30)|{index}|------------|0|0|{size}|{a_time}|{m_time}|{c_time}|{cr_time}\n"
     else:
-        return f"{full_path},{size},{allocated_size},{cr_time},{m_time},{a_time},{c_time}\n"
+        return f"{full_path},{index},{size},{alloc_size},{cr_time},{m_time},{a_time},{c_time}\n"
 
 
-def get_record_output(filename_attributes, parent_path, out_bodyfile):
+def get_mft_key(index_entry):
+    return index_entry["FILE_REFERENCE"]["FileRecordNumber"], index_entry["FILE_REFERENCE"]["SequenceNumber"]
+
+
+def get_record_output(mft_dict, index_entries, parent_path, deleted_only, out_bodyfile):
     lines = list()
-    for filename_attribute in filename_attributes:
-        if not filename_attribute["FilenameLengthInCharacters"]:
+    for index_entry in index_entries:
+        if (mft_key := get_mft_key(index_entry)) in mft_dict and deleted_only:
             continue
-
         try:
-            a_time, c_time, m_time, cr_time = get_timestamps(filename_attribute, out_bodyfile)
-        except OverflowError:
+            line = get_output_by_format(index_entry["FILENAME_ATTRIBUTE"], parent_path, mft_key[0], out_bodyfile)
+            lines.append(line)
+        except (OverflowError, EmptyNameInFilenameAttribute):
             continue
-
-        full_path = concatenate(parent_path, filename_attribute)
-        size, alloc_size = filename_attribute["RealSize"], filename_attribute["AllocatedSize"]
-        lines.append(get_output_by_format(full_path, size, alloc_size, a_time, m_time, cr_time, cr_time, out_bodyfile))
 
     return lines
 
@@ -178,21 +189,19 @@ def get_record_output(filename_attributes, parent_path, out_bodyfile):
 def init_line_list(out_bodyfile):
     lines = list()
     if not out_bodyfile:
-        lines.append(f"Path,Size,AllocatedSize,CreationTime,ModificationTime,AccessTime,ChangeTime\n")
+        lines.append(f"Path,FileNumber,Size,AllocatedSize,CreationTime,ModificationTime,AccessTime,ChangeTime\n")
     return lines
 
 
-def get_output_lines(mft_dict, vbr, root_name, out_bodyfile, slack_only):
+def get_output_lines(mft_dict, vbr, root_name, out_bodyfile, deleted_only):
     cache = dict()
     lines = init_line_list(out_bodyfile)
 
     for key in mft_dict:
         if index_allocation := mft_dict[key]["INDEX_ALLOCATION"]:
-            filename_attributes = find_index_entries(index_allocation, *key, vbr, slack_only)
-
-            if filename_attributes is not None:
-                parent_path = get_path(mft_dict, key, cache, root_name)
-                lines += get_record_output(filename_attributes, parent_path, out_bodyfile)
+            index_entries = find_index_entries(index_allocation, *key, vbr)
+            parent_path = get_path(mft_dict, key, cache, root_name)
+            lines += get_record_output(mft_dict, index_entries, parent_path, deleted_only, out_bodyfile)
     return lines
 
 
@@ -204,7 +213,7 @@ def main():
         mft_dict = get_mft_dict(raw_partition, mft_data, vbr)
 
         with open(args.outfile, 'wt+', encoding='utf-8') as outfile:
-            outfile.writelines(get_output_lines(mft_dict, vbr, args.m, args.bodyfile, args.slack_only))
+            outfile.writelines(get_output_lines(mft_dict, vbr, args.m, args.bodyfile, args.deleted_only))
 
 
 if __name__ == '__main__':
