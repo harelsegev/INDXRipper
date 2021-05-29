@@ -42,7 +42,7 @@ This reduces noise in case you combine the output with the output of fls or MFTE
 The combined output won't contain duplicate lines, as a result of files that still have their MFT records.
 
 Well, almost. These duplicate lines cannot be eliminated entirely without potential information loss.  
-After an index entry is deleted, it's file reference may be overitten. If it is overitten, it'll probably be invalid and the entry will be outputted, even if the MFT record still exists. It is not possible to know if the MFT record the entry pointed was recycled since.
+After an index entry is deleted, it's file reference may be overitten. If it is overitten, it'll probably be invalid and the entry will be outputted, even if the MFT record still exists. It is not possible to know if the MFT record the entry pointed to was recycled since.
 
 **Note:** Index entries of deleted files that their MFT record **wasn't** recycled will **not** be outputted! These files' MFT records will be outputted by fls and MFTECmd.
 
