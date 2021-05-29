@@ -10,6 +10,7 @@ from ntfs import FILE_REFERENCE, FILENAME_ATTRIBUTE, NUM_OF_FIXUP_BYTES
 import re
 
 NODE_HEADER_OFFSET = 24
+FILENAME_ATTRIBUTE_OFFSET_IN_ENTRY = 16
 
 INDEX_RECORD_HEADER = Struct(
     "Magic" / Const(b'INDX'),
@@ -22,6 +23,12 @@ INDEX_RECORD_HEADER = Struct(
     Padding(4),
     "UpdateSequence" / Int16ul,
     "UpdateSequenceArray" / Array(lambda this: this.UpdateSequenceSize - 1, Int16ul)
+)
+
+INDEX_ENTRY = Struct(
+    "FILE_REFERENCE" / FILE_REFERENCE,
+    Padding(8),
+    "FILENAME_ATTRIBUTE" / FILENAME_ATTRIBUTE
 )
 
 
@@ -49,18 +56,18 @@ def _find_parent_reference_offsets(index_record, parent_mft_record_index, parent
     return (match.start() for match in re.finditer(re.escape(parent_reference), index_record))
 
 
-def _find_index_entries(index_record, parent_mft_record_index, parent_mft_record_sequence, start):
+def _find_index_entries(index_record, parent_mft_record_index, parent_mft_record_sequence):
     parent_reference_offsets = _find_parent_reference_offsets(index_record, parent_mft_record_index,
                                                               parent_mft_record_sequence)
 
     index_record = BytesIO(index_record)
     for offset in parent_reference_offsets:
-        if offset >= start:
-            index_record.seek(offset)
-            yield FILENAME_ATTRIBUTE.parse_stream(index_record)
+        if (entry_offset := offset - FILENAME_ATTRIBUTE_OFFSET_IN_ENTRY) >= 0:
+            index_record.seek(entry_offset)
+            yield INDEX_ENTRY.parse_stream(index_record)
 
 
-def find_index_entries(raw_index_nonresident_stream, parent_mft_record_index, parent_mft_record_sequence, vbr, slack_only):
+def find_index_entries(raw_index_nonresident_stream, parent_mft_record_index, parent_mft_record_sequence, vbr):
     for index_record in _get_index_records(raw_index_nonresident_stream, vbr):
         try:
             record_header = _get_index_record_header(index_record)
@@ -69,9 +76,5 @@ def find_index_entries(raw_index_nonresident_stream, parent_mft_record_index, pa
 
         _apply_fixup(index_record, record_header, vbr)
 
-        start = 0
-        if slack_only:
-            start = _get_node_slack_offset(record_header)
-
-        for entry in _find_index_entries(index_record, parent_mft_record_index, parent_mft_record_sequence, start):
+        for entry in _find_index_entries(index_record, parent_mft_record_index, parent_mft_record_sequence):
             yield entry
