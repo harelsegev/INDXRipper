@@ -20,13 +20,12 @@ The slack space of these attributes may contain index entries of deleted files, 
 ## How it works
 INDXRipper scans the MFT for records of directories that have an $INDEX_ALLOCATION attribute. If it finds such a record, it searches the attribute for file references to this record. Since the index entries in the attribute are of the directory's children, the $FILE_NAME attributes in them must contain this file reference.
 
-Finding the full paths of directories is done using the parent directory reference in the $FILE_NAME attributes inside the MFT records.
-
 ## Features and Details
 ### Basic Features
 * Applies fixups for index records and MFT records.
 * Supports $INDEX_ALLOCATION and $FILE_NAME attributes in extension records
 * Supports Unicode filenames
+* The full paths of directories are determined using the parent directory references from the MFT records.
 * Index entries from orphan directories are listed under "/$Orphan"
 * Works on live Windows NTFS drives, using the "\\\\.\\\" notation
 * All times outputted are UTC times
