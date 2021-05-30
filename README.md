@@ -39,10 +39,11 @@ In addition to the parent file reference, index entries contain a file reference
 If the --deleted-only switch is given, INDXRipper follows this file reference. If it succeeds, the index entry is not outputted.  
 
 This reduces noise in case you combine the output with the output of fls or MFTECmd.  
-The combined output won't contain duplicate lines, as a result of files that still have their MFT records.
+The combined output won't contain duplicate lines for files that still have their MFT records.
 
 Well, almost. These duplicate lines cannot be eliminated entirely without potential information loss.  
-After an index entry is deleted, it's file reference may be overitten. If it is overitten, it'll probably be invalid and the entry will be outputted, even if the MFT record still exists. It is not possible to know if the MFT record the entry pointed to was recycled since.
+Deleted entries may have their file reference overitten. The overitten reference will probably be invalid and the entry will be outputted, despite the file having an MFT record.
+It's not possible to know if the MFT record the entry pointed to was recycled since.
 
 **Note:** Index entries of deleted files that their MFT record **wasn't** recycled will **not** be outputted! These files' MFT records will be outputted by fls and MFTECmd.
 
