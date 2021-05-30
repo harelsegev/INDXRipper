@@ -42,7 +42,7 @@ This reduces noise in case you combine the output with the output of fls or MFTE
 The combined output won't contain duplicate lines for files that still have their MFT records.
 
 Well, almost. These duplicate lines cannot be eliminated entirely without potential information loss.  
-Deleted entries may have their file reference overitten. The overitten reference will probably be invalid and the entry will be outputted, despite the file having an MFT record.
+Deleted entries may have their file reference overwritten. The overwritten reference will probably be invalid and the entry will be outputted, despite the file having an MFT record.
 It's not possible to know if the MFT record the entry pointed to was recycled since.
 
 **Note:** Index entries of deleted files that their MFT record **wasn't** recycled will **not** be outputted! These files' MFT records will be outputted by fls and MFTECmd.
@@ -66,7 +66,7 @@ python INDXRipper.py -m D: --deleted-only --bodyfile \\.\D: output.bodyfile
 
 ## Limitations
 * The tool may give false results.
-* Entries that are partially overitten may not be found. If they are found, though, the tool may give you false information.
+* Entries that are partially overwritten may not be found. If they are found, though, the tool may give you false information.
 
 ### What this tool doesn't do
 * This tool doesn't process $INDEX_ROOT attributes. You won't see an output for every file on the volume
