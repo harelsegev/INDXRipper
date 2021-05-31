@@ -40,7 +40,7 @@ If the --deleted-only switch is given, INDXRipper follows this file reference. I
 This reduces noise (duplicate information) in case you combine the output with the output of fls or MFTECmd.
 
 **Note:**
-The file reference of a deleted entry may be overwritten. Therefore, the MFT index outputted by INDXRipper may be false.
+The file reference in a deleted entry may be overwritten. Therefore, the MFT index outputted by INDXRipper may be false.
 
 ## Installation 
 Python 3.8 or above is required.  
