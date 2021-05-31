@@ -37,15 +37,10 @@ When creating a supertimeline, it is recommended to use the --deleted-only switc
 ### The --deleted-only Switch
 In addition to the parent file reference, index entries contain a file reference to their own file's MFT record.  
 If the --deleted-only switch is given, INDXRipper follows this file reference. If it succeeds, the index entry is not outputted.  
+This reduces noise (duplicate information) in case you combine the output with the output of fls or MFTECmd.
 
-This reduces noise in case you combine the output with the output of fls or MFTECmd.  
-The combined output won't contain duplicate lines for files that still have their MFT records.
-
-Well, almost. These duplicate lines cannot be eliminated entirely without potential information loss.  
-Deleted entries may have their file reference overwritten. The overwritten reference will probably be invalid and the entry will be outputted, despite the file having an MFT record.
-It's not possible to know if the MFT record the entry pointed to was recycled since.
-
-**Note:** Index entries of deleted files that their MFT record **wasn't** recycled will **not** be outputted! These files' MFT records will be outputted by fls and MFTECmd.
+**Note:**
+The file reference of a deleted entry may be overwritten. Therefore, the MFT index outputted by INDXRipper may be false.
 
 ## Installation 
 Python 3.8 or above is required.  
