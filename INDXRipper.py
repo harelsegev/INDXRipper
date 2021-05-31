@@ -154,7 +154,7 @@ def concatenate(parent_path, filename_attribute):
     return f"{parent_path}/{filename_attribute['FilenameInUnicode']}"
 
 
-def get_output_by_format(filename_attribute, parent_path, index, out_bodyfile):
+def get_output_by_format(filename_attribute, parent_path, index, sequence, out_bodyfile):
     if not filename_attribute["FilenameLengthInCharacters"]:
         raise EmptyNameInFilenameAttribute
 
@@ -165,7 +165,7 @@ def get_output_by_format(filename_attribute, parent_path, index, out_bodyfile):
     if out_bodyfile:
         return f"0|{full_path} ($I30)|{index}|------------|0|0|{size}|{a_time}|{m_time}|{c_time}|{cr_time}\n"
     else:
-        return f"{full_path},{index},{size},{alloc_size},{cr_time},{m_time},{a_time},{c_time}\n"
+        return f"{full_path},{index},{sequence},{size},{alloc_size},{cr_time},{m_time},{a_time},{c_time}\n"
 
 
 def get_mft_key(index_entry):
@@ -175,10 +175,11 @@ def get_mft_key(index_entry):
 def get_record_output(mft_dict, index_entries, parent_path, deleted_only, out_bodyfile):
     lines = list()
     for index_entry in index_entries:
-        if (mft_key := get_mft_key(index_entry)) in mft_dict and deleted_only:
+        mft_key = get_mft_key(index_entry)
+        if deleted_only and mft_key in mft_dict:
             continue
         try:
-            line = get_output_by_format(index_entry["FILENAME_ATTRIBUTE"], parent_path, mft_key[0], out_bodyfile)
+            line = get_output_by_format(index_entry["FILENAME_ATTRIBUTE"], parent_path, *mft_key, out_bodyfile)
             lines.append(line)
         except (OverflowError, EmptyNameInFilenameAttribute):
             continue
@@ -189,7 +190,8 @@ def get_record_output(mft_dict, index_entries, parent_path, deleted_only, out_bo
 def init_line_list(out_bodyfile):
     lines = list()
     if not out_bodyfile:
-        lines.append(f"Path,FileNumber,Size,AllocatedSize,CreationTime,ModificationTime,AccessTime,ChangeTime\n")
+        lines.append(f"Path,FileNumber,SequenceNumber,Size,AllocatedSize,CreationTime,ModificationTime,AccessTime,"
+                     f"ChangeTime\n") 
     return lines
 
 
