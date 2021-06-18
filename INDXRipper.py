@@ -70,9 +70,12 @@ def get_index_allocation_attribute(vbr, raw_partition, mft_cluster, record_heade
 
 
 def get_mft_dict_values(vbr, raw_partition, mft_cluster, record_header):
-    values = get_filename_attribute_values(mft_cluster, record_header)
-    values["INDEX_ALLOCATION"] = get_index_allocation_attribute(vbr, raw_partition, mft_cluster, record_header)
-    return values
+    if is_directory(record_header):
+        values = get_filename_attribute_values(mft_cluster, record_header)
+        values["INDEX_ALLOCATION"] = get_index_allocation_attribute(vbr, raw_partition, mft_cluster, record_header)
+        return values
+
+    return dict()
 
 
 def get_mft_records(mft_data, vbr):
@@ -97,12 +100,12 @@ def add_to_mft_dict(mft_dict, key, values: dict):
 def get_mft_dict(raw_partition, mft_data, vbr):
     mft_dict = dict()
     for index, sequence, mft_cluster, record_header in get_mft_records(mft_data, vbr):
-        if values := get_mft_dict_values(vbr, raw_partition, mft_cluster, record_header):
-            if is_base_record(record_header):
-                add_to_mft_dict(mft_dict, (index, sequence), values)
-            else:
-                base_reference = get_base_record_reference(record_header)
-                add_to_mft_dict(mft_dict, base_reference, values)
+        values = get_mft_dict_values(vbr, raw_partition, mft_cluster, record_header)
+        if is_base_record(record_header):
+            add_to_mft_dict(mft_dict, (index, sequence), values)
+        else:
+            base_reference = get_base_record_reference(record_header)
+            add_to_mft_dict(mft_dict, base_reference, values)
     return mft_dict
 
 
@@ -200,10 +203,11 @@ def get_output_lines(mft_dict, vbr, root_name, out_bodyfile, deleted_only):
     lines = init_line_list(out_bodyfile)
 
     for key in mft_dict:
-        if index_allocation := mft_dict[key]["INDEX_ALLOCATION"]:
-            index_entries = find_index_entries(index_allocation, *key, vbr)
-            parent_path = get_path(mft_dict, key, cache, root_name)
-            lines += get_record_output(mft_dict, index_entries, parent_path, deleted_only, out_bodyfile)
+        if mft_dict[key]:
+            if index_allocation := mft_dict[key]["INDEX_ALLOCATION"]:
+                index_entries = find_index_entries(index_allocation, *key, vbr)
+                parent_path = get_path(mft_dict, key, cache, root_name)
+                lines += get_record_output(mft_dict, index_entries, parent_path, deleted_only, out_bodyfile)
     return lines
 
 
