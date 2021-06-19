@@ -41,8 +41,9 @@ In addition to the parent file reference, index entries contain a file reference
 If the --deleted-only switch is given, INDXRipper follows this file reference. If it succeeds, the index entry is not outputted.  
 This reduces noise (duplicate information) in case you combine the output with the output of fls or MFTECmd.
 
-**Note:**
-The file reference in a deleted entry may be overwritten. Therefore, the MFT index outputted by INDXRipper may be false.
+**Note:**  
+You may see deleted entries for files that are still active, because NTFS moves the entries around to keep them sorted.  
+If the --deleted-only switch is given, an entry with a valid file reference will not be outputted. However, the file reference in a deleted entry may be overwritten and become invalid.
 
 ## Installation 
 Python 3.8 or above is required.  
