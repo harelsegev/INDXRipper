@@ -44,9 +44,8 @@ def get_filename_attribute_values(mft_cluster, record_header):
     parent_index, parent_sequence = 0, 0
     longest_filename, previous_longest_filename_length = "", -1
     for attribute in get_filename_attributes(mft_cluster, record_header):
-        parent_index, parent_sequence = get_parent_reference(attribute)
-
         if attribute["FilenameLengthInCharacters"] > previous_longest_filename_length:
+            parent_index, parent_sequence = get_parent_reference(attribute)
             longest_filename = attribute["FilenameInUnicode"]
             previous_longest_filename_length = attribute["FilenameLengthInCharacters"]
 
