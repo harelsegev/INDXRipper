@@ -21,6 +21,7 @@ BOOT_SECTOR = Struct(
     Padding(11),
     "BytsPerSec" / Int16ul,
     "SecPerClus" / Int8ul,
+    "BytsPerClus" / Computed(lambda this: this.BytsPerSec * this.SecPerClus),
     Padding(34),
     "MftClusNumber" / Int64ul,
     Padding(8),
@@ -33,6 +34,7 @@ BOOT_SECTOR = Struct(
     "BytsPerIndx" / Computed(lambda this:
                              this.BytsOrClusPerIndx * this.SecPerClus * this.BytsPerSec if this.BytsOrClusPerIndx > 0
                              else 2 ** abs(this.BytsOrClusPerIndx)),
+    "BytsPerMftCluster" / Computed(lambda this: this.BytsPerClus if this.BytsPerClus > this.BytsPerRec else this.BytsPerRec),
     Padding(443)
 )
 
@@ -142,17 +144,17 @@ def get_boot_sector(raw_partition):
 
 
 def _get_mft_offset(vbr):
-    return vbr["MftClusNumber"] * vbr["SecPerClus"] * vbr["BytsPerSec"]
+    return vbr["MftClusNumber"] * vbr["BytsPerClus"]
 
 
 def _get_first_mft_cluster(vbr, raw_partition):
     record_offset = _get_mft_offset(vbr)
     raw_partition.seek(record_offset)
-    return bytearray(raw_partition.read(vbr["BytsPerSec"] * vbr["SecPerClus"]))
+    return bytearray(raw_partition.read(vbr["BytsPerMftCluster"]))
 
 
 def apply_file_record_fixup(mft_cluster, vbr):
-    for record_offset in range(0, vbr["BytsPerSec"] * vbr["SecPerClus"], vbr["BytsPerRec"]):
+    for record_offset in range(0, vbr["BytsPerMftCluster"], vbr["BytsPerRec"]):
         try:
             record_fixup = FILE_RECORD_FIXUP.parse(mft_cluster[record_offset:record_offset + vbr["BytsPerRec"]])
         except ConstError:
@@ -166,7 +168,7 @@ def apply_file_record_fixup(mft_cluster, vbr):
 
 
 def get_record_headers(mft_cluster, vbr):
-    for i in range(0, vbr["BytsPerSec"] * vbr["SecPerClus"], vbr["BytsPerRec"]):
+    for i in range(0, vbr["BytsPerMftCluster"], vbr["BytsPerRec"]):
         try:
             mft_cluster.seek(i)
             yield FILE_RECORD_HEADER.parse_stream(mft_cluster, offset=i)
@@ -275,7 +277,7 @@ def get_non_resident_attribute(vbr, raw_partition, mft_cluster, attribute_header
         raise EmptyNonResidentAttributeError
 
     dataruns = get_dataruns(mft_cluster, attribute_header["OffsetInCluster"] + attribute_header["DataRunsOffset"])
-    return NonResidentStream(vbr["BytsPerSec"] * vbr["SecPerClus"], raw_partition, dataruns)
+    return NonResidentStream(vbr["BytsPerClus"], raw_partition, dataruns)
 
 
 def get_mft_data_attribute(vbr, raw_partition):
@@ -288,7 +290,6 @@ def get_mft_data_attribute(vbr, raw_partition):
 
 
 def get_mft_clusters(vbr, mft_data_attribute_stream):
-    cluster_size = vbr["BytsPerSec"] * vbr["SecPerClus"]
     mft_data_attribute_stream.seek(0)
-    while current_cluster := mft_data_attribute_stream.read(cluster_size):
+    while current_cluster := mft_data_attribute_stream.read(vbr["BytsPerMftCluster"]):
         yield current_cluster
