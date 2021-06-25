@@ -19,7 +19,7 @@ The slack space of these attributes may contain index entries of deleted files, 
 ## Why Another Tool?
 Because carving INDX records, writing them all to disk and parsing them takes too much time.  
 If a system has an SSD rather than a spinning disk, you're unlikely to recover any records from unallocated space anyways.
-## How It Works
+## How does it Work?
 INDXRipper scans the MFT for records of directories that have an $INDEX_ALLOCATION attribute. If it finds such a record, it searches the attribute for file references to this record. Since the index entries in the attribute are of the directory's children, the $FILE_NAME attributes in them must contain this file reference.
 
 ## Features and Details
