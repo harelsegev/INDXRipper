@@ -3,6 +3,8 @@
     Author: Harel Segev
     05/16/2021
 """
+__version__ = "2.4"
+
 from ntfs import *
 from indx import *
 import argparse
@@ -18,6 +20,7 @@ def get_arguments():
                                      description="find index entries in $INDEX_ALLOCATION attributes")
     parser.add_argument("volume", metavar="volume", help=r"path to NTFS volume")
     parser.add_argument("outfile", metavar="outfile", help=r"output file path")
+    parser.add_argument("-V", "--version", action='version', version=f"%(prog)s {__version__}")
     parser.add_argument("-m", metavar="MOUNT_POINT", default="",
                         help="a name to display as the mount point of the image, e.g., C:")
     parser.add_argument("--deleted-only", action="store_true",
