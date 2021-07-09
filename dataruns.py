@@ -39,10 +39,11 @@ def correct_offsets(dataruns):
 
 
 class NonResidentStream(BytesIO):
-    def __init__(self, bytes_per_cluster, raw_partition, dataruns):
+    def __init__(self, bytes_per_cluster, partition_offset, raw_image, dataruns):
         super().__init__()
-        self.raw_partition = raw_partition
+        self.raw_image = raw_image
         self.bytes_per_cluster = bytes_per_cluster
+        self.partition_offset = partition_offset
 
         self.dataruns = dataruns
         self.dataruns_index = 0
@@ -80,8 +81,8 @@ class NonResidentStream(BytesIO):
         return min(self.bytes_to_end_of_current_datarun(), size)
 
     def read_bytes(self, bytes_to_read):
-        self.raw_partition.seek(self.physical_offset)
-        return self.raw_partition.read(bytes_to_read)
+        self.raw_image.seek(self.physical_offset + self.partition_offset)
+        return self.raw_image.read(bytes_to_read)
 
     def read_helper(self, size):
         res = bytearray()
