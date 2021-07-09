@@ -17,10 +17,11 @@ A file's index entry contains the following information:
 
 The slack space of these attributes may contain index entries of deleted files, even after thier MFT record was recycled. Finding these index entries may help you prove a file existed on a system.
 ## Why Another Tool?
-Because carving INDX records, writing them all to disk and parsing them takes too much time.  
-If a system has an SSD rather than a spinning disk, you're unlikely to recover any records from unallocated space anyways.
+While the data in the slack space of $INDEX_ALLOCATION attributes is valuable, it is not always viable to collect and parse it.  
+In some cases in computer forensics - especially in incident response, a file system timeline is required as fast as possible.  
+While the $MFT file can be quickly collected and parsed, using many different tools, existing tools for carving index entries from $INDEX_ALLOCATION slack space are time intensive, and there aren't as many of them. As a result, this data is sometimes ignored.
 ## How does it Work?
-INDXRipper scans the MFT for records of directories that have an $INDEX_ALLOCATION attribute. If it finds such a record, it searches the attribute for file references to this record. Since the index entries in the attribute are of the directory's children, the $FILE_NAME attributes in them must contain this file reference.
+INDXRipper scans the MFT for records of directories that have an $INDEX_ALLOCATION attribute. If it finds such a record, it searches the attribute for file references to this record. Since the index entries in the attribute are of the directory's children, the $FILE_NAME attributes in them should contain this file reference.
 
 ## Features and Details
 ### Basic Features
@@ -28,8 +29,8 @@ INDXRipper scans the MFT for records of directories that have an $INDEX_ALLOCATI
 * Supports $INDEX_ALLOCATION and $FILE_NAME attributes in extension records
 * Supports Unicode filenames
 * The full paths of directories are determined using the parent directory references from the MFT records.
-* Index entries from orphan directories are listed under "/$Orphan"
-* Works on live Windows NTFS drives, using the "\\\\.\\\" notation
+* Orphan directories are listed under "/$Orphan"
+* Works on live Windows NTFS drives, using the "\\\\.\\" paths
 * All times outputted are UTC times
 
 ### The --bodyfile Switch
@@ -41,9 +42,10 @@ In addition to the parent file reference, index entries contain a file reference
 If the --deleted-only switch is given, INDXRipper follows this file reference. If it succeeds, the index entry is not outputted.  
 This reduces noise (duplicate information) in case you combine the output with the output of fls or MFTECmd.
 
-**Note:**  
-You may see deleted entries for files that are still active, because NTFS moves the entries around to keep them sorted.  
-If the --deleted-only switch is given, an entry with a valid file reference will not be outputted. However, the file reference in a deleted entry may be overwritten and become invalid.
+**Notice:**  
+The output will contain entries for active files!  
+This happens because NTFS moves the entries around to keep them sorted, so there are unallocated entries for active files.  
+The file reference in those entries may be overwritten and become invalid, causing the entry to be outputted - despite the file being active!
 
 ## Installation 
 Python 3.8 or above is required.  
@@ -55,7 +57,10 @@ Alternatively, you can use the Windows standalone executable.
 
 ## Usage
 ```bash
-# process a dead partition image, get all index entries
+# process the partition in sector 1026048, get all index entries
+python INDXRipper.py -o 1026048 raw_disk.dd output.csv
+
+# process a partition image, get all index entries
 python INDXRipper.py ntfs.part.001 output.csv
 
 # process the D: drive, --deleted-only mode, bodyfile output, append "D:" to all the paths
