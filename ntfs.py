@@ -35,6 +35,7 @@ BOOT_SECTOR = Struct(
                              this.BytsOrClusPerIndx * this.SecPerClus * this.BytsPerSec if this.BytsOrClusPerIndx > 0
                              else 2 ** abs(this.BytsOrClusPerIndx)),
     "BytsPerMftCluster" / Computed(lambda this: this.BytsPerClus if this.BytsPerClus > this.BytsPerRec else this.BytsPerRec),
+    "OffsetInImage" / Computed(lambda this: this._.offset),
     Padding(443)
 )
 
@@ -138,19 +139,19 @@ FILENAME_ATTRIBUTE = Struct(
 NUM_OF_FIXUP_BYTES = 2
 
 
-def get_boot_sector(raw_partition):
-    raw_partition.seek(0)
-    return BOOT_SECTOR.parse_stream(raw_partition)
+def get_boot_sector(raw_image, partition_offset):
+    raw_image.seek(partition_offset)
+    return BOOT_SECTOR.parse_stream(raw_image, offset=partition_offset)
 
 
 def _get_mft_offset(vbr):
-    return vbr["MftClusNumber"] * vbr["BytsPerClus"]
+    return vbr["MftClusNumber"] * vbr["BytsPerClus"] + vbr["OffsetInImage"]
 
 
-def _get_first_mft_cluster(vbr, raw_partition):
+def _get_first_mft_cluster(vbr, raw_image):
     record_offset = _get_mft_offset(vbr)
-    raw_partition.seek(record_offset)
-    return bytearray(raw_partition.read(vbr["BytsPerMftCluster"]))
+    raw_image.seek(record_offset)
+    return bytearray(raw_image.read(vbr["BytsPerMftCluster"]))
 
 
 def apply_file_record_fixup(mft_cluster, vbr):
@@ -264,11 +265,11 @@ def parse_filename_attribute(filename_attribute):
     return FILENAME_ATTRIBUTE.parse(filename_attribute)
 
 
-def get_non_resident_attribute(vbr, raw_partition, mft_cluster, attribute_header):
+def get_non_resident_attribute(vbr, raw_image, mft_cluster, attribute_header):
     """
     Get an attribute object from an attribute header, for non resident attributes only
     :param vbr: the NTFS volume's VBR object
-    :param raw_partition: file object for the raw partition
+    :param raw_image: file object for the raw partition
     :param mft_cluster: the raw mft cluster
     :param attribute_header: the attribute header of your attribute
     :return: a stream object for your non resident attribute
@@ -277,16 +278,16 @@ def get_non_resident_attribute(vbr, raw_partition, mft_cluster, attribute_header
         raise EmptyNonResidentAttributeError
 
     dataruns = get_dataruns(mft_cluster, attribute_header["OffsetInCluster"] + attribute_header["DataRunsOffset"])
-    return NonResidentStream(vbr["BytsPerClus"], raw_partition, dataruns)
+    return NonResidentStream(vbr["BytsPerClus"], vbr["OffsetInImage"], raw_image, dataruns)
 
 
-def get_mft_data_attribute(vbr, raw_partition):
-    mft_cluster = _get_first_mft_cluster(vbr, raw_partition)
+def get_mft_data_attribute(vbr, raw_image):
+    mft_cluster = _get_first_mft_cluster(vbr, raw_image)
     mft_cluster = apply_file_record_fixup(mft_cluster, vbr)
     record_headers = get_record_headers(mft_cluster, vbr)
     attribute_headers = get_attribute_headers(mft_cluster, next(record_headers))
     mft_data_attribute_header = get_attribute_header(attribute_headers, "DATA")
-    return get_non_resident_attribute(vbr, raw_partition, mft_cluster, mft_data_attribute_header)
+    return get_non_resident_attribute(vbr, raw_image, mft_cluster, mft_data_attribute_header)
 
 
 def get_mft_clusters(vbr, mft_data_attribute_stream):
