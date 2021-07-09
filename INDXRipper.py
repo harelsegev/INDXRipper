@@ -3,7 +3,7 @@
     Author: Harel Segev
     05/16/2021
 """
-__version__ = "2.4"
+__version__ = "2.5"
 
 from ntfs import *
 from indx import *
@@ -18,11 +18,15 @@ class EmptyNameInFilenameAttribute(ValueError):
 def get_arguments():
     parser = argparse.ArgumentParser(prog="INDXRipper",
                                      description="find index entries in $INDEX_ALLOCATION attributes")
-    parser.add_argument("volume", metavar="volume", help=r"path to NTFS volume")
+    parser.add_argument("image", metavar="image", help=r"image file path")
     parser.add_argument("outfile", metavar="outfile", help=r"output file path")
     parser.add_argument("-V", "--version", action='version', version=f"%(prog)s {__version__}")
     parser.add_argument("-m", metavar="MOUNT_POINT", default="",
                         help="a name to display as the mount point of the image, e.g., C:")
+    parser.add_argument("-o", metavar="OFFSET", type=int, default=0,
+                        help="offset to an NTFS partition, in sectors")
+    parser.add_argument("-b", metavar="SECTOR_SIZE", type=int, default=512,
+                        help="sector size in bytes. default is 512")
     parser.add_argument("--deleted-only", action="store_true",
                         help="only display entries with an invalid file reference")
     parser.add_argument("--bodyfile", action="store_true", help="bodyfile output. default is CSV")
@@ -62,19 +66,19 @@ def is_directory_index_allocation(attribute_header, mft_cluster):
     return res and get_attribute_name(mft_cluster, attribute_header) == "$I30"
 
 
-def get_index_allocation_attribute(vbr, raw_partition, mft_cluster, record_header):
+def get_index_allocation_attribute(vbr, raw_image, mft_cluster, record_header):
     for attribute_header in get_attribute_headers(mft_cluster, record_header):
         if is_directory_index_allocation(attribute_header, mft_cluster):
             try:
-                return get_non_resident_attribute(vbr, raw_partition, mft_cluster, attribute_header)
+                return get_non_resident_attribute(vbr, raw_image, mft_cluster, attribute_header)
             except EmptyNonResidentAttributeError:
                 continue
 
 
-def get_mft_dict_values(vbr, raw_partition, mft_cluster, record_header):
+def get_mft_dict_values(vbr, raw_image, mft_cluster, record_header):
     if is_directory(record_header):
         values = get_filename_attribute_values(mft_cluster, record_header)
-        values["INDEX_ALLOCATION"] = get_index_allocation_attribute(vbr, raw_partition, mft_cluster, record_header)
+        values["INDEX_ALLOCATION"] = get_index_allocation_attribute(vbr, raw_image, mft_cluster, record_header)
         return values
 
     return dict()
@@ -99,10 +103,10 @@ def add_to_mft_dict(mft_dict, key, values: dict):
         mft_dict[key] = values
 
 
-def get_mft_dict(raw_partition, mft_data, vbr):
+def get_mft_dict(raw_image, mft_data, vbr):
     mft_dict = dict()
     for index, sequence, mft_cluster, record_header in get_mft_records(mft_data, vbr):
-        values = get_mft_dict_values(vbr, raw_partition, mft_cluster, record_header)
+        values = get_mft_dict_values(vbr, raw_image, mft_cluster, record_header)
         if is_base_record(record_header):
             add_to_mft_dict(mft_dict, (index, sequence), values)
         else:
@@ -138,7 +142,7 @@ def to_datetime(filetime):
 
 
 def to_epoch(filetime):
-    return int(to_datetime(filetime).replace(tzinfo=timezone.utc).timestamp())
+    return to_datetime(filetime).replace(tzinfo=timezone.utc).timestamp()
 
 
 def to_iso(filetime):
@@ -215,12 +219,12 @@ def get_output_lines(mft_dict, vbr, root_name, out_bodyfile, deleted_only):
 
 def main():
     args = get_arguments()
-    with open(args.volume, "rb") as raw_partition:
-        vbr = get_boot_sector(raw_partition)
-        mft_data = get_mft_data_attribute(vbr, raw_partition)
-        mft_dict = get_mft_dict(raw_partition, mft_data, vbr)
+    with open(args.image, "rb") as raw_image:
+        vbr = get_boot_sector(raw_image, args.o * args.b)
+        mft_data = get_mft_data_attribute(vbr, raw_image)
+        mft_dict = get_mft_dict(raw_image, mft_data, vbr)
 
-        with open(args.outfile, 'wt+', encoding='utf-8') as outfile:
+        with open(args.outfile, 'at+', encoding='utf-8') as outfile:
             outfile.writelines(get_output_lines(mft_dict, vbr, args.m, args.bodyfile, args.deleted_only))
 
 
