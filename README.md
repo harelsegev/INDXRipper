@@ -66,6 +66,7 @@ python INDXRipper.py ntfs.part.001 output.csv
 # process the D: drive, --deleted-only mode, bodyfile output, append "D:" to all the paths
 python INDXRipper.py -m D: --deleted-only --bodyfile \\.\D: output.bodyfile
 ```
+https://www.youtube.com/watch?v=0HT1uiP-BRg
 
 ## Limitations
 * The tool may give false results.
