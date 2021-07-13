@@ -18,8 +18,7 @@ A file's index entry contains the following information:
 The slack space of these attributes may contain index entries of deleted files, even after thier MFT record was recycled. Finding these index entries may help you prove a file existed on a system.
 ## Why Another Tool?
 While the data in the slack space of $INDEX_ALLOCATION attributes is valuable, it is not always viable to collect and parse it.  
-In some cases in computer forensics - especially in incident response, a file system timeline is required as fast as possible.  
-While the $MFT file can be quickly collected and parsed, using many different tools, existing tools for carving index entries from $INDEX_ALLOCATION slack space are time intensive, and there aren't as many of them. As a result, this data is sometimes ignored.
+While the $MFT file can be quickly collected and parsed, using many different tools, existing tools for carving index entries from $INDEX_ALLOCATION slack space are time intensive, and there aren't as many of them.
 ## How does it Work?
 INDXRipper scans the MFT for records of directories that have an $INDEX_ALLOCATION attribute. If it finds such a record, it searches the attribute for file references to this record. Since the index entries in the attribute are of the directory's children, the $FILE_NAME attributes in them should contain this file reference.
 
@@ -43,7 +42,7 @@ If the --deleted-only switch is given, INDXRipper follows this file reference. I
 This reduces noise (duplicate information) in case you combine the output with the output of fls or MFTECmd.
 
 **Notice:**  
-The output will contain entries for active files!  
+The output will most likely contain entries for active files!  
 This happens because NTFS moves the entries around to keep them sorted, so there are unallocated entries for active files.  
 The file reference in those entries may be overwritten and become invalid, causing the entry to be outputted - despite the file being active!
 
