@@ -96,23 +96,29 @@ def get_mft_records(mft_data, vbr):
             yield current_record, get_sequence_number(record_header), mft_cluster, record_header
 
 
-def add_to_mft_dict(mft_dict, key, values: dict):
-    if key in mft_dict:
-        mft_dict[key].update(values)
-    else:
-        mft_dict[key] = values
+def get_mft_dict_helper(raw_image, mft_data, vbr):
+    base_records = dict()
+    extension_records = dict()
 
-
-def get_mft_dict(raw_image, mft_data, vbr):
-    mft_dict = dict()
     for index, sequence, mft_cluster, record_header in get_mft_records(mft_data, vbr):
         values = get_mft_dict_values(vbr, raw_image, mft_cluster, record_header)
         if is_base_record(record_header):
-            add_to_mft_dict(mft_dict, (index, sequence), values)
+            base_records[(index, sequence)] = values
         else:
             base_reference = get_base_record_reference(record_header)
-            add_to_mft_dict(mft_dict, base_reference, values)
-    return mft_dict
+            extension_records[base_reference] = values
+
+    return base_records, extension_records
+
+
+def get_mft_dict(raw_image, mft_data, vbr):
+    base_records, extension_records = get_mft_dict_helper(raw_image, mft_data, vbr)
+
+    for base_reference in extension_records:
+        if base_reference in base_records:
+            base_records[base_reference].update(extension_records[base_reference])
+
+    return base_records
 
 
 ROOT_KEY = (5, 5)
