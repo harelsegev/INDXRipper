@@ -180,7 +180,7 @@ def get_output_by_format(filename_attribute, parent_path, index, sequence, out_b
     if out_bodyfile:
         return f"0|{full_path} ($I30)|{index}|------------|0|0|{size}|{a_time}|{m_time}|{c_time}|{cr_time}\n"
     else:
-        return f"{full_path},{index},{sequence},{size},{alloc_size},{cr_time},{m_time},{a_time},{c_time}\n"
+        return f'"{full_path}",{index},{sequence},{size},{alloc_size},{cr_time},{m_time},{a_time},{c_time}\n'
 
 
 def get_mft_key(index_entry):
