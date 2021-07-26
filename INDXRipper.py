@@ -144,7 +144,7 @@ def get_path_helper(mft_dict, key):
         return path_cache[key]
     else:
         if key not in mft_dict:
-            path_cache[key] = "$Orphan"
+            path_cache[key] = "/$Orphan"
 
         else:
             filename = get_first_filename(mft_dict, key)
