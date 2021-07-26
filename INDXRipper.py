@@ -223,7 +223,7 @@ def get_record_output(mft_dict, index_entries, parent_path, deleted_only, out_bo
 
 def get_output_lines(mft_dict, vbr, root_name, out_bodyfile, deleted_only):
     if not out_bodyfile:
-        yield "Path,FileNumber,SequenceNumber,Size,AllocatedSize,CreationTime,ModificationTime,AccessTime,ChangeTime\n"
+        yield ["Path,FileNumber,SequenceNumber,Size,AllocatedSize,CreationTime,ModificationTime,AccessTime,ChangeTime\n"]
 
     for key in mft_dict:
         for index_allocation in mft_dict[key]["$INDEX_ALLOCATION"]:
