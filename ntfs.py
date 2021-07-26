@@ -132,7 +132,11 @@ FILENAME_ATTRIBUTE = Struct(
                    INDEX_VIEW=0x20000000),
     Padding(4),
     "FilenameLengthInCharacters" / Int8ul,
-    "FilenameNamespace" / Int8ul,
+    "FilenameNamespace" / Enum(Int8ul,
+                               POSIX=0,
+                               WIN32=1,
+                               DOS=2,
+                               WIN32_DOS=3),
     "FilenameInUnicode" / PaddedString(lambda this: this.FilenameLengthInCharacters * 2, "utf16")
 )
 
