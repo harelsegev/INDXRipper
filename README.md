@@ -16,9 +16,9 @@ A file's index entry contains the following information:
 * A set of MACB timestamps
 
 The slack space of these attributes may contain index entries of deleted files, even after thier MFT record was recycled. Finding these index entries may help you prove a file existed on a system.
-## Why Another Tool?
+## Why another tool?
 The data in the slack space of $INDEX_ALLOCATION attributes is valuable, yet it is not always viable to collect and parse it. While the $MFT file can be quickly collected and parsed, using many different tools, existing tools for carving index entries from $INDEX_ALLOCATION slack space are time intensive, and there aren't as many of them.
-## How does it Work?
+## How does it work?
 INDXRipper scans the MFT for records of directories that have an $INDEX_ALLOCATION attribute. If it finds such a record, it searches the attribute for file references to this record. Since the index entries in the attribute are of the directory's children, the $FILE_NAME attributes in them should contain this file reference.
 
 ## Features and Details
@@ -28,7 +28,7 @@ INDXRipper scans the MFT for records of directories that have an $INDEX_ALLOCATI
 * Supports Unicode filenames
 * The full paths of directories are determined using the parent directory references from the MFT records.
 * Orphan directories are listed under "/$Orphan"
-* Works on live Windows NTFS drives, using the "\\\\.\\" paths
+* Works on live Windows NTFS drives, using "\\\\.\\" paths (device paths)
 * All times outputted are UTC times
 
 ### The --bodyfile Switch
@@ -48,7 +48,7 @@ This happens because NTFS moves the entries around to keep them sorted, so there
 Python 3.8 or above is required.  
 Use the package manager [pip](https://pip.pypa.io/en/stable/) to install construct.
 ```bash
-pip install construct==2.10.56
+pip install construct==2.10.67
 ```
 Alternatively, you can use the Windows standalone executable. 
 
@@ -69,7 +69,7 @@ https://www.youtube.com/watch?v=0HT1uiP-BRg
 * The tool may give false results.
 * Entries that are partially overwritten may not be found. If they are found, though, the tool may give you false information.
 
-### What This Tool Doesn't Do
+### What this tool doesn't do
 * This tool doesn't process $INDEX_ROOT attributes. You won't see an output for every file on the volume
 * This tool doesn't carve $INDEX_ALLOCATION attributes. It won't find attributes that thier MFT entry was recycled.
 
