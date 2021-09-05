@@ -3,7 +3,7 @@
     Author: Harel Segev
     05/16/2021
 """
-__version__ = "2.5.2"
+__version__ = "2.6.0"
 
 from ntfs import *
 from indx import *
@@ -13,10 +13,6 @@ from contextlib import suppress
 
 
 class EmptyNameInFilenameAttribute(ValueError):
-    pass
-
-
-class NoFilenameAttributeInRecord(ValueError):
     pass
 
 
@@ -32,8 +28,9 @@ def get_arguments():
                         help="offset to an NTFS partition, in sectors")
     parser.add_argument("-b", metavar="SECTOR_SIZE", type=int, default=512,
                         help="sector size in bytes. default is 512")
-    parser.add_argument("--deleted-only", action="store_true",
+    parser.add_argument("--invalid-only", action="store_true",
                         help="only display entries with an invalid file reference")
+    parser.add_argument("--dedup", action="store_true", help="deduplicate output lines")
     parser.add_argument("--bodyfile", action="store_true", help="bodyfile output. default is CSV")
     return parser.parse_args()
 
@@ -71,8 +68,7 @@ def get_index_allocation_attributes(vbr, raw_image, mft_cluster, record_header):
 def get_mft_dict_values(vbr, raw_image, mft_cluster, record_header):
     values = dict({"$FILE_NAME": [], "$INDEX_ALLOCATION": []})
     if is_directory(record_header):
-        with suppress(NoFilenameAttributeInRecord):
-            values["$FILE_NAME"] += get_filename_attribute_values(mft_cluster, record_header)
+        values["$FILE_NAME"] += get_filename_attribute_values(mft_cluster, record_header)
 
         with suppress(EmptyNonResidentAttributeError):
             values["$INDEX_ALLOCATION"] += get_index_allocation_attributes(vbr, raw_image, mft_cluster, record_header)
@@ -211,17 +207,25 @@ def get_entry_output(mft_dict, index_entry, parent_path, deleted_only, out_bodyf
         return get_output_by_format(index_entry["FILENAME_ATTRIBUTE"], parent_path, *mft_key, out_bodyfile)
 
 
-def get_record_output(mft_dict, index_entries, parent_path, deleted_only, out_bodyfile):
-    lines = list()
+def get_collection(dedup):
+    if dedup:
+        return set(), set.add
+    else:
+        return list(), list.append
+
+
+def get_record_output(mft_dict, index_entries, parent_path, deleted_only, dedup, out_bodyfile):
+    lines, push_line = get_collection(dedup)
+
     for index_entry in index_entries:
         with suppress(OverflowError, EmptyNameInFilenameAttribute):
             if line := get_entry_output(mft_dict, index_entry, parent_path, deleted_only, out_bodyfile):
-                lines.append(line)
+                push_line(lines, line)
 
     return lines
 
 
-def get_output_lines(mft_dict, vbr, root_name, out_bodyfile, deleted_only):
+def get_output_lines(mft_dict, vbr, root_name, deleted_only, dedup, out_bodyfile):
     if not out_bodyfile:
         yield ["Path,FileNumber,SequenceNumber,Size,AllocatedSize,CreationTime,ModificationTime,AccessTime,ChangeTime\n"]
 
@@ -229,7 +233,7 @@ def get_output_lines(mft_dict, vbr, root_name, out_bodyfile, deleted_only):
         for index_allocation in mft_dict[key]["$INDEX_ALLOCATION"]:
             index_entries = find_index_entries(index_allocation, *key, vbr)
             parent_path = get_path(mft_dict, key, root_name)
-            yield get_record_output(mft_dict, index_entries, parent_path, deleted_only, out_bodyfile)
+            yield get_record_output(mft_dict, index_entries, parent_path, deleted_only, dedup, out_bodyfile)
 
 
 def main():
@@ -240,7 +244,7 @@ def main():
         mft_dict = get_mft_dict(raw_image, mft_data, vbr)
 
         with open(args.outfile, 'at+', encoding='utf-8') as outfile:
-            for lines in get_output_lines(mft_dict, vbr, args.m, args.bodyfile, args.deleted_only):
+            for lines in get_output_lines(mft_dict, vbr, args.m, args.invalid_only, args.dedup, args.bodyfile):
                 outfile.writelines(lines)
 
 
