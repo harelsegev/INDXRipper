@@ -3,7 +3,7 @@
     Author: Harel Segev
     05/16/2021
 """
-__version__ = "2.6.0"
+__version__ = "2.6.1"
 
 from ntfs import *
 from indx import *
@@ -13,6 +13,10 @@ from contextlib import suppress
 
 
 class EmptyNameInFilenameAttribute(ValueError):
+    pass
+
+
+class NoFilenameAttributeInRecord(ValueError):
     pass
 
 
@@ -96,29 +100,17 @@ def add_to_mft_dict(mft_dict, key, values):
         mft_dict[key]["$FILE_NAME"] += values["$FILE_NAME"]
 
 
-def get_mft_dict_helper(raw_image, mft_data, vbr):
-    base_records = dict()
-    extension_records = dict()
-
+def get_mft_dict(raw_image, mft_data, vbr):
+    mft_dict = dict()
     for index, sequence, mft_cluster, record_header in get_mft_records(mft_data, vbr):
         values = get_mft_dict_values(vbr, raw_image, mft_cluster, record_header)
         if is_base_record(record_header):
-            add_to_mft_dict(base_records, (index, sequence), values)
+            add_to_mft_dict(mft_dict, (index, sequence), values)
         else:
             base_reference = get_base_record_reference(record_header)
-            add_to_mft_dict(extension_records, base_reference, values)
+            add_to_mft_dict(mft_dict, base_reference, values)
 
-    return base_records, extension_records
-
-
-def get_mft_dict(raw_image, mft_data, vbr):
-    base_records, extension_records = get_mft_dict_helper(raw_image, mft_data, vbr)
-
-    for base_reference in extension_records:
-        if base_reference in base_records:
-            add_to_mft_dict(base_records, base_reference, extension_records[base_reference])
-
-    return base_records
+    return mft_dict
 
 
 NAMESPACE_PRIORITY = {"POSIX": 0, "DOS": 1, "WIN32_DOS": 2, "WIN32": 3}
@@ -129,7 +121,10 @@ def get_filename_priority(filename):
 
 
 def get_first_filename(mft_dict, key):
-    return max(mft_dict[key]["$FILE_NAME"], key=get_filename_priority)
+    if mft_dict[key]["$FILE_NAME"]:
+        return max(mft_dict[key]["$FILE_NAME"], key=get_filename_priority)
+    else:
+        raise NoFilenameAttributeInRecord
 
 
 path_cache = dict({(5, 5): ""})
@@ -141,10 +136,13 @@ def get_path_helper(mft_dict, key):
     else:
         if key not in mft_dict:
             path_cache[key] = "/$Orphan"
-
         else:
-            filename = get_first_filename(mft_dict, key)
-            path_cache[key] = get_path_helper(mft_dict, filename["PARENT_REFERENCE"]) + "/" + filename["FILENAME"]
+            try:
+                filename = get_first_filename(mft_dict, key)
+                path_cache[key] = get_path_helper(mft_dict, filename["PARENT_REFERENCE"]) + "/" + filename["FILENAME"]
+
+            except NoFilenameAttributeInRecord:
+                path_cache[key] = "/$NoName/[FileNumber: {}, SequenceNumber: {}]".format(*key)
 
         return path_cache[key]
 
@@ -201,9 +199,9 @@ def get_mft_key(index_entry):
     return index_entry["FILE_REFERENCE"]["FileRecordNumber"], index_entry["FILE_REFERENCE"]["SequenceNumber"]
 
 
-def get_entry_output(mft_dict, index_entry, parent_path, deleted_only, out_bodyfile):
+def get_entry_output(mft_dict, index_entry, parent_path, invalid_only, out_bodyfile):
     mft_key = get_mft_key(index_entry)
-    if not deleted_only or mft_key not in mft_dict:
+    if not invalid_only or mft_key not in mft_dict:
         return get_output_by_format(index_entry["FILENAME_ATTRIBUTE"], parent_path, *mft_key, out_bodyfile)
 
 
@@ -214,18 +212,18 @@ def get_collection(dedup):
         return list(), list.append
 
 
-def get_record_output(mft_dict, index_entries, parent_path, deleted_only, dedup, out_bodyfile):
-    lines, push_line = get_collection(dedup)
+def get_record_output(mft_dict, index_entries, parent_path, invalid_only, dedup, out_bodyfile):
+    lines, add_line = get_collection(dedup)
 
     for index_entry in index_entries:
         with suppress(OverflowError, EmptyNameInFilenameAttribute):
-            if line := get_entry_output(mft_dict, index_entry, parent_path, deleted_only, out_bodyfile):
-                push_line(lines, line)
+            if line := get_entry_output(mft_dict, index_entry, parent_path, invalid_only, out_bodyfile):
+                add_line(lines, line)
 
     return lines
 
 
-def get_output_lines(mft_dict, vbr, root_name, deleted_only, dedup, out_bodyfile):
+def get_output_lines(mft_dict, vbr, root_name, invalid_only, dedup, out_bodyfile):
     if not out_bodyfile:
         yield ["Path,FileNumber,SequenceNumber,Size,AllocatedSize,CreationTime,ModificationTime,AccessTime,ChangeTime\n"]
 
@@ -233,7 +231,7 @@ def get_output_lines(mft_dict, vbr, root_name, deleted_only, dedup, out_bodyfile
         for index_allocation in mft_dict[key]["$INDEX_ALLOCATION"]:
             index_entries = find_index_entries(index_allocation, *key, vbr)
             parent_path = get_path(mft_dict, key, root_name)
-            yield get_record_output(mft_dict, index_entries, parent_path, deleted_only, dedup, out_bodyfile)
+            yield get_record_output(mft_dict, index_entries, parent_path, invalid_only, dedup, out_bodyfile)
 
 
 def main():
