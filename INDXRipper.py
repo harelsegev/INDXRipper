@@ -3,20 +3,27 @@
     Author: Harel Segev
     05/16/2021
 """
-__version__ = "2.6.1"
+__version__ = "2.6.2"
 
-from ntfs import *
-from indx import *
 import argparse
+from sys import stderr
 from datetime import datetime, timedelta, timezone
 from contextlib import suppress
 
+from ntfs import parse_filename_attribute, get_resident_attribute, get_attribute_name, get_attribute_type
+from ntfs import is_valid_fixup, is_valid_record_signature, get_attribute_headers
+from ntfs import EmptyNonResidentAttributeError, get_non_resident_attribute, is_directory
+from ntfs import get_mft_chunks, get_record_headers, apply_fixup, get_sequence_number
+from ntfs import get_boot_sector, get_mft_data_attribute, get_base_record_reference, is_base_record
 
-class EmptyNameInFilenameAttribute(ValueError):
+from indx import find_index_entries
+
+
+class EmptyNameInFilenameAttributeError(ValueError):
     pass
 
 
-class NoFilenameAttributeInRecord(ValueError):
+class NoFilenameAttributeInRecordError(ValueError):
     pass
 
 
@@ -39,11 +46,12 @@ def get_arguments():
     return parser.parse_args()
 
 
-def get_filename_attributes(mft_cluster, record_header):
-    for attribute_header in get_attribute_headers(mft_cluster, record_header):
-        if get_attribute_type(attribute_header) == "FILE_NAME":
-            with suppress(UnicodeError):
-                yield parse_filename_attribute(get_resident_attribute(mft_cluster, attribute_header))
+def eprint(*args, **kwargs):
+    print(*args, file=stderr, **kwargs)
+
+
+def warning(message):
+    eprint(f"INDXRipper: warning: {message}")
 
 
 def get_parent_reference(filename_attribute):
@@ -51,45 +59,55 @@ def get_parent_reference(filename_attribute):
     return parent_reference["FileRecordNumber"], parent_reference["SequenceNumber"]
 
 
-def get_filename_attribute_values(mft_cluster, record_header):
-    for attribute in get_filename_attributes(mft_cluster, record_header):
-        parent_index, parent_sequence = get_parent_reference(attribute)
-        filename, namespace = attribute["FilenameInUnicode"], attribute["FilenameNamespace"]
-        yield {"PARENT_REFERENCE": (parent_index, parent_sequence), "FILENAME": filename, "NAMESPACE": namespace}
+def get_filename_attribute(mft_chunk, attribute_header):
+    return parse_filename_attribute(get_resident_attribute(mft_chunk, attribute_header))
 
 
-def is_directory_index_allocation(attribute_header, mft_cluster):
+def get_filename_attribute_values(mft_chunk, attribute_header):
+    filename_attribute = get_filename_attribute(mft_chunk, attribute_header)
+    parent_index, parent_sequence = get_parent_reference(filename_attribute)
+    filename, namespace = filename_attribute["FilenameInUnicode"], filename_attribute["FilenameNamespace"]
+    return {"PARENT_REFERENCE": (parent_index, parent_sequence), "FILENAME": filename, "NAMESPACE": namespace}
+
+
+def is_directory_index_allocation(attribute_header):
     res = get_attribute_type(attribute_header) == "INDEX_ALLOCATION"
-    return res and get_attribute_name(mft_cluster, attribute_header) == "$I30"
+    return res and get_attribute_name(attribute_header) == "$I30"
 
 
-def get_index_allocation_attributes(vbr, raw_image, mft_cluster, record_header):
-    for attribute_header in get_attribute_headers(mft_cluster, record_header):
-        if is_directory_index_allocation(attribute_header, mft_cluster):
-            yield get_non_resident_attribute(vbr, raw_image, mft_cluster, attribute_header)
+def add_to_mft_values(vbr, raw_image, mft_chunk, attribute_header, values):
+    if get_attribute_type(attribute_header) == "FILE_NAME":
+        with suppress(UnicodeError):
+            values["$FILE_NAME"] += [get_filename_attribute_values(mft_chunk, attribute_header)]
+
+    elif is_directory_index_allocation(attribute_header):
+        with suppress(EmptyNonResidentAttributeError):
+            values["$INDEX_ALLOCATION"] += [get_non_resident_attribute(vbr, raw_image, mft_chunk, attribute_header)]
 
 
-def get_mft_dict_values(vbr, raw_image, mft_cluster, record_header):
+def get_mft_dict_values(vbr, raw_image, mft_chunk, record_header):
     values = dict({"$FILE_NAME": [], "$INDEX_ALLOCATION": []})
     if is_directory(record_header):
-        values["$FILE_NAME"] += get_filename_attribute_values(mft_cluster, record_header)
-
-        with suppress(EmptyNonResidentAttributeError):
-            values["$INDEX_ALLOCATION"] += get_index_allocation_attributes(vbr, raw_image, mft_cluster, record_header)
+        for attribute_header in get_attribute_headers(mft_chunk, record_header):
+            add_to_mft_values(vbr, raw_image, mft_chunk, attribute_header, values)
 
     return values
 
 
 def get_mft_records(mft_data, vbr):
     current_record = -1
-    for mft_cluster in get_mft_clusters(vbr, mft_data):
-        mft_cluster = apply_file_record_fixup(mft_cluster, vbr)
-        for record_header in get_record_headers(mft_cluster, vbr):
-            current_record += 1
-            if not record_header:
-                continue
+    for mft_chunk in get_mft_chunks(vbr, mft_data):
+        record_headers = get_record_headers(mft_chunk, vbr)
+        apply_fixup(mft_chunk, record_headers, vbr)
 
-            yield current_record, get_sequence_number(record_header), mft_cluster, record_header
+        for record_header in record_headers:
+            current_record += 1
+            if is_valid_record_signature(record_header):
+                if not is_valid_fixup(record_header):
+                    warning(f"fixup verification failed for file record at index {current_record}")
+                    continue
+
+                yield current_record, get_sequence_number(record_header), mft_chunk, record_header
 
 
 def add_to_mft_dict(mft_dict, key, values):
@@ -102,8 +120,8 @@ def add_to_mft_dict(mft_dict, key, values):
 
 def get_mft_dict(raw_image, mft_data, vbr):
     mft_dict = dict()
-    for index, sequence, mft_cluster, record_header in get_mft_records(mft_data, vbr):
-        values = get_mft_dict_values(vbr, raw_image, mft_cluster, record_header)
+    for index, sequence, mft_chunk, record_header in get_mft_records(mft_data, vbr):
+        values = get_mft_dict_values(vbr, raw_image, mft_chunk, record_header)
         if is_base_record(record_header):
             add_to_mft_dict(mft_dict, (index, sequence), values)
         else:
@@ -124,7 +142,7 @@ def get_first_filename(mft_dict, key):
     if mft_dict[key]["$FILE_NAME"]:
         return max(mft_dict[key]["$FILE_NAME"], key=get_filename_priority)
     else:
-        raise NoFilenameAttributeInRecord
+        raise NoFilenameAttributeInRecordError
 
 
 path_cache = dict({(5, 5): ""})
@@ -133,18 +151,19 @@ path_cache = dict({(5, 5): ""})
 def get_path_helper(mft_dict, key):
     if key in path_cache:
         return path_cache[key]
+
+    elif key not in mft_dict:
+        path_cache[key] = "/$Orphan"
+
     else:
-        if key not in mft_dict:
-            path_cache[key] = "/$Orphan"
-        else:
-            try:
-                filename = get_first_filename(mft_dict, key)
-                path_cache[key] = get_path_helper(mft_dict, filename["PARENT_REFERENCE"]) + "/" + filename["FILENAME"]
+        try:
+            filename = get_first_filename(mft_dict, key)
+            path_cache[key] = get_path_helper(mft_dict, filename["PARENT_REFERENCE"]) + "/" + filename["FILENAME"]
 
-            except NoFilenameAttributeInRecord:
-                path_cache[key] = "/$NoName/[FileNumber: {}, SequenceNumber: {}]".format(*key)
+        except NoFilenameAttributeInRecordError:
+            path_cache[key] = "/$NoName/[FileNumber: {}, SequenceNumber: {}]".format(*key)
 
-        return path_cache[key]
+    return path_cache[key]
 
 
 def get_path(mft_dict, key, mount_point):
@@ -175,7 +194,7 @@ def get_timestamps_by_format(filename_attribute, out_bodyfile):
 
 def get_full_path(filename_attribute, parent_path):
     if not filename_attribute["FilenameLengthInCharacters"]:
-        raise EmptyNameInFilenameAttribute
+        raise EmptyNameInFilenameAttributeError
 
     return parent_path + "/" + filename_attribute["FilenameInUnicode"]
 
@@ -216,16 +235,19 @@ def get_record_output(mft_dict, index_entries, parent_path, invalid_only, dedup,
     lines, add_line = get_collection(dedup)
 
     for index_entry in index_entries:
-        with suppress(OverflowError, EmptyNameInFilenameAttribute):
+        with suppress(OverflowError, EmptyNameInFilenameAttributeError):
             if line := get_entry_output(mft_dict, index_entry, parent_path, invalid_only, out_bodyfile):
                 add_line(lines, line)
 
     return lines
 
 
+CSV_HEADER = "Path,FileNumber,SequenceNumber,Size,AllocatedSize,CreationTime,ModificationTime,AccessTime,ChangeTime\n"
+
+
 def get_output_lines(mft_dict, vbr, root_name, invalid_only, dedup, out_bodyfile):
     if not out_bodyfile:
-        yield ["Path,FileNumber,SequenceNumber,Size,AllocatedSize,CreationTime,ModificationTime,AccessTime,ChangeTime\n"]
+        yield [CSV_HEADER]
 
     for key in mft_dict:
         for index_allocation in mft_dict[key]["$INDEX_ALLOCATION"]:
