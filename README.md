@@ -39,7 +39,7 @@ For this purpose, the **--invalid-only**, **--bodyfile**, and the **--dedup** sw
 #### The --invalid-only switch
 If the --invalid-only switch is given, INDXRipper will only output entries with no valid reference to an MFT record - omitting many of the files that would appear in an MFT timeline. Use this switch for integration with fls or MFTECmd.
 * Not all deleted files will be outputted, only the ones that lost their MFT record.
-* You will probably see output for files that still have their MFT record. Some of them may not even be deleted. This happens because NTFS moves the index entries around to keep them sorted, so there are unallocated entries for active files. The file reference in the unallocated entries may be overwritten and become invalid, causing the entry to be outputted, despite the file being active.
+* You will probably see output for files that still have their MFT record - some of them may not even be deleted! This happens because NTFS moves the index entries around to keep them sorted. This means there are old, unallocated entries for active files. The file reference in these unallocated entries may be overwritten and become invalid, causing them to be outputted, despite the file being active.
 
 #### The --bodyfile and --dedup switches
 * The --bodyfile switch will output a bodyfile, for integration with other tools that produce a bodyfile.
