@@ -3,14 +3,13 @@
     Author: Harel Segev
     05/16/2020
 """
-from dataruns import NonResidentStream, get_dataruns
-from io import BytesIO
 
-from construct import Struct, ConstError
-from construct import Padding, Computed, Enum, Const, BytesInteger, PaddedString, If, Array
-from construct import Int8ul, Int16ul, Int32ul, Int64ul
-from construct import Int8sl
-from construct.core import StreamError
+from construct import Struct, Padding, Computed, IfThenElse, BytesInteger, Const, Enum, Array, FlagsEnum, Switch, Tell
+from construct import PaddedString, Pointer, Seek, Optional, StopIf, RepeatUntil, Padded
+from construct import Int8ul, Int16ul, Int32ul, Int64ul, Int8sl
+
+from dataruns import get_dataruns, NonResidentStream
+from sys import exit as sys_exit
 
 
 class EmptyNonResidentAttributeError(ValueError):
@@ -18,92 +17,111 @@ class EmptyNonResidentAttributeError(ValueError):
 
 
 BOOT_SECTOR = Struct(
+    "OffsetInImage" / Tell,
     Padding(11),
     "BytsPerSec" / Int16ul,
     "SecPerClus" / Int8ul,
     "BytsPerClus" / Computed(lambda this: this.BytsPerSec * this.SecPerClus),
+
     Padding(34),
     "MftClusNumber" / Int64ul,
     Padding(8),
-    "BytsOrClusPerRec" / Int8sl,
-    "BytsPerRec" / Computed(lambda this:
-                            this.BytsOrClusPerRec * this.SecPerClus * this.BytsPerSec if this.BytsOrClusPerRec > 0
-                            else 2 ** abs(this.BytsOrClusPerRec)),
-    Padding(3),
-    "BytsOrClusPerIndx" / Int8sl,
-    "BytsPerIndx" / Computed(lambda this:
-                             this.BytsOrClusPerIndx * this.SecPerClus * this.BytsPerSec if this.BytsOrClusPerIndx > 0
-                             else 2 ** abs(this.BytsOrClusPerIndx)),
-    "BytsPerMftCluster" / Computed(lambda this: this.BytsPerClus if this.BytsPerClus > this.BytsPerRec else this.BytsPerRec),
-    "OffsetInImage" / Computed(lambda this: this._.offset),
-    Padding(443)
-)
 
-END_OF_RECORD_SIGNATURE = b'\xFF\xFF\xFF\xFF'
-END_OF_RECORD_SIGNATURE_LENGTH = 4
+    "BytsOrClusPerRec" / Int8sl,
+    "BytsPerRec" / IfThenElse(
+        lambda this: this.BytsOrClusPerRec > 0,
+        Computed(lambda this: this.BytsOrClusPerRec * this.BytsPerClus),
+        Computed(lambda this: 2 ** abs(this.BytsOrClusPerRec)),
+    ),
+    Padding(3),
+
+    "BytsOrClusPerIndx" / Int8sl,
+    "BytsPerIndx" / IfThenElse(
+        lambda this: this.BytsOrClusPerIndx > 0,
+        Computed(lambda this: this.BytsOrClusPerIndx * this.BytsPerClus),
+        Computed(lambda this: 2 ** abs(this.BytsOrClusPerIndx)),
+    ),
+
+    "BytsPerMftChunk" / IfThenElse(
+        lambda this: this.BytsPerClus > this.BytsPerRec,
+        Computed(lambda this: this.BytsPerClus),
+        Computed(lambda this: this.BytsPerRec)
+    ),
+)
 
 FILE_REFERENCE = Struct(
     "FileRecordNumber" / BytesInteger(6, swapped=True, signed=False),
     "SequenceNumber" / Int16ul
 )
 
-FLAGS_IN_USE = 0x01
-FLAGS_DIRECTORY = 0x02
-
-
 FILE_RECORD_HEADER = Struct(
-    "Magic" / Const(b'FILE'),
-    Padding(12),
+    "OffsetInChunk" / Tell,
+    "Magic" / Optional(Const(b'FILE')),
+    StopIf(lambda this: this.Magic is None),
+
+    "UpdateSequenceOffset" / Int16ul,
+    "UpdateSequenceSize" / Int16ul,
+
+    Padding(8),
     "SequenceNumber" / Int16ul,
     Padding(2),
-    "OffsetToFirstAttribute" / Int16ul,
-    "Flags" / Int16ul,
+    "FirstAttributeOffset" / Int16ul,
+    "Flags" / FlagsEnum(Int16ul, IN_USE=1, DIRECTORY=2),
     Padding(8),
     "BaseRecordReference" / FILE_REFERENCE,
     "NextAttributeId" / Int16ul,
-    "OffsetInCluster" / Computed(lambda this: this._.offset)
-)
 
-FILE_RECORD_FIXUP = Struct(
-    "Magic" / Const(b'FILE'),
-    "UpdateSequenceOffset" / Int16ul,
-    "UpdateSequenceSize" / Int16ul,
-    Padding(lambda this: this.UpdateSequenceOffset - 8),
+    Seek(lambda this: this.UpdateSequenceOffset + this.OffsetInChunk),
     "UpdateSequenceNumber" / Int16ul,
     "UpdateSequenceArray" / Array(lambda this: this.UpdateSequenceSize - 1, Int16ul)
 )
 
+FILE_RECORD_HEADERS = Struct(
+    "RecordHeaders" / Array(
+        lambda this: this._.records_per_chunk,
+        Padded(lambda this: this._.bytes_per_record, FILE_RECORD_HEADER)
+    )
+)
+
 ATTRIBUTE_HEADER = Struct(
-    "Type" / Enum(Int32ul,
-                  STANDARD_INFORMATION=0x10,
-                  ATTRIBUTE_LIST=0x20,
-                  FILE_NAME=0x30,
-                  OBJECTID=0x40,
-                  SECURITY_DESCRIPTOR=0x50,
-                  VOLUME_NAME=0x60,
-                  VOLUME_INFORMATION=0x70,
-                  DATA=0x80,
-                  INDEX_ROOT=0x90,
-                  INDEX_ALLOCATION=0xA0,
-                  BITMAP=0xB0,
-                  REPARSE_POINT=0xC0,
-                  EA_INFORMATION=0xD0,
-                  EA=0xE0,
-                  LOGGED_UTILITY_STREAM=0x100),
+    "EndOfRecordSignature" / Optional(Const(b'\xFF\xFF\xFF\xFF')),
+    StopIf(lambda this: this.EndOfRecordSignature is not None),
+
+    "OffsetInChunk" / Tell,
+    "Type" / Enum(Int32ul, FILE_NAME=0x30, INDEX_ALLOCATION=0xA0, DATA=0x80),
     "Length" / Int32ul,
-    "NonResidentFlag" / Enum(Int8ul, RESIDENT=0x00, NON_RESIDENT=0x01),
+    "Residence" / Enum(Int8ul, RESIDENT=0x00, NON_RESIDENT=0x01),
     "NameLength" / Int8ul,
     "NameOffset" / Int16ul,
+    "AttributeName" / Pointer(lambda this: this.NameOffset + this.OffsetInChunk,
+                              PaddedString(lambda this: 2 * this.NameLength, "utf16")),
     Padding(2),
     "AttributeId" / Int16ul,
-    "AttributeLength" / If(lambda this: this.NonResidentFlag == "RESIDENT", Int32ul),
-    "AttributeOffset" / If(lambda this: this.NonResidentFlag == "RESIDENT", Int16ul),
-    Padding(16),
-    "DataRunsOffset" / If(lambda this: this.NonResidentFlag == "NON_RESIDENT", Int16ul),
-    Padding(6),
-    "AllocatedSize" / If(lambda this: this.NonResidentFlag == "NON_RESIDENT", Int64ul),
-    "RealSize" / If(lambda this: this.NonResidentFlag == "NON_RESIDENT", Int64ul),
-    "OffsetInCluster" / Computed(lambda this: this._.offset)
+    "Metadata" / Switch(
+        lambda this: this.Residence,
+        {
+            "RESIDENT":
+                Struct(
+                    "AttributeLength" / Int32ul,
+                    "AttributeOffset" / Int16ul,
+                ),
+            "NON_RESIDENT":
+                Struct(
+                    Padding(16),
+                    "DataRunsOffset" / Int16ul,
+                    Padding(6),
+                    "AllocatedSize" / Int64ul,
+                    "RealSize" / Int64ul,
+                )
+        }
+    ),
+
+    Seek(lambda this: this.Length + this.OffsetInChunk)
+)
+
+ATTRIBUTE_HEADERS = Struct(
+    Seek(lambda this: this._.offset),
+    "AttributeHeaders" / RepeatUntil(lambda obj, lst, ctx: obj.EndOfRecordSignature is not None, ATTRIBUTE_HEADER)
 )
 
 FILENAME_ATTRIBUTE = Struct(
@@ -140,49 +158,62 @@ FILENAME_ATTRIBUTE = Struct(
     "FilenameInUnicode" / PaddedString(lambda this: this.FilenameLengthInCharacters * 2, "utf16")
 )
 
-NUM_OF_FIXUP_BYTES = 2
-
 
 def get_boot_sector(raw_image, partition_offset):
     raw_image.seek(partition_offset)
-    return BOOT_SECTOR.parse_stream(raw_image, offset=partition_offset)
+    return BOOT_SECTOR.parse_stream(raw_image)
 
 
-def _get_mft_offset(vbr):
+def get_mft_offset(vbr):
     return vbr["MftClusNumber"] * vbr["BytsPerClus"] + vbr["OffsetInImage"]
 
 
-def _get_first_mft_cluster(vbr, raw_image):
-    record_offset = _get_mft_offset(vbr)
-    raw_image.seek(record_offset)
-    return bytearray(raw_image.read(vbr["BytsPerMftCluster"]))
+def get_first_mft_chunk(vbr, raw_image):
+    raw_image.seek(get_mft_offset(vbr))
+    return bytearray(raw_image.read(vbr["BytsPerMftChunk"]))
 
 
-def apply_file_record_fixup(mft_cluster, vbr):
-    for record_offset in range(0, vbr["BytsPerMftCluster"], vbr["BytsPerRec"]):
-        try:
-            record_fixup = FILE_RECORD_FIXUP.parse(mft_cluster[record_offset:record_offset + vbr["BytsPerRec"]])
-        except ConstError:
-            continue
-
-        for i, usn_offset_in_record in enumerate(range(vbr["BytsPerSec"] - NUM_OF_FIXUP_BYTES, vbr["BytsPerRec"], vbr["BytsPerSec"])):
-            usn_offset_in_cluster = usn_offset_in_record + record_offset
-            mft_cluster[usn_offset_in_cluster:usn_offset_in_cluster + NUM_OF_FIXUP_BYTES] = Int16ul.build(record_fixup["UpdateSequenceArray"][i])
-
-    return BytesIO(mft_cluster)
+NUM_OF_FIXUP_BYTES = 2
 
 
-def get_record_headers(mft_cluster, vbr):
-    for i in range(0, vbr["BytsPerMftCluster"], vbr["BytsPerRec"]):
-        try:
-            mft_cluster.seek(i)
-            yield FILE_RECORD_HEADER.parse_stream(mft_cluster, offset=i)
-        except ConstError:
-            yield None
+def get_record_headers(mft_chunk, vbr):
+    return FILE_RECORD_HEADERS.parse(
+        mft_chunk,
+        bytes_per_record=vbr["BytsPerRec"],
+        records_per_chunk=vbr["BytsPerMftChunk"] // vbr["BytsPerRec"]
+    )["RecordHeaders"]
+
+
+def is_valid_record_signature(record_header):
+    return record_header["Magic"] is not None
+
+
+def apply_record_fixup(mft_chunk, record_header, vbr):
+    usn = record_header["UpdateSequenceNumber"]
+    first_fixup_offset = record_header["OffsetInChunk"] + vbr["BytsPerSec"] - NUM_OF_FIXUP_BYTES
+    end_of_record_offset = record_header["OffsetInChunk"] + vbr["BytsPerRec"]
+
+    for i, usn_offset in enumerate(range(first_fixup_offset, end_of_record_offset, vbr["BytsPerSec"])):
+        if Int16ul.parse(mft_chunk[usn_offset:usn_offset + NUM_OF_FIXUP_BYTES]) != usn:
+            return False
+
+        mft_chunk[usn_offset:usn_offset + NUM_OF_FIXUP_BYTES] = Int16ul.build(record_header["UpdateSequenceArray"][i])
+
+    return True
+
+
+def apply_fixup(mft_chunk, record_headers, vbr):
+    for record_header in record_headers:
+        if is_valid_record_signature(record_header):
+            record_header["IsValidFixup"] = apply_record_fixup(mft_chunk, record_header, vbr)
+
+
+def is_valid_fixup(record_header):
+    return record_header["IsValidFixup"]
 
 
 def is_directory(record_header):
-    return record_header["Flags"] & FLAGS_DIRECTORY == FLAGS_DIRECTORY
+    return record_header["Flags"]["DIRECTORY"]
 
 
 def get_sequence_number(record_header):
@@ -198,103 +229,69 @@ def get_base_record_reference(record_header):
     return base_reference["FileRecordNumber"], base_reference["SequenceNumber"]
 
 
-def _is_end_of_record(mft_cluster, offset):
-    try:
-        mft_cluster.seek(offset)
-        return mft_cluster.read(END_OF_RECORD_SIGNATURE_LENGTH) == END_OF_RECORD_SIGNATURE
-    except StreamError:
-        return True
+def get_attribute_headers(mft_chunk, record_header):
+    first_attribute_offset = record_header["FirstAttributeOffset"] + record_header["OffsetInChunk"]
+    res = ATTRIBUTE_HEADERS.parse(mft_chunk, offset=first_attribute_offset)
+    return res["AttributeHeaders"][:-1]
 
 
-def get_attribute_headers(mft_cluster, record_header):
-    next_offset = record_header["OffsetToFirstAttribute"] + record_header["OffsetInCluster"]
-    while not _is_end_of_record(mft_cluster, next_offset):
-        try:
-            mft_cluster.seek(next_offset)
-            res = ATTRIBUTE_HEADER.parse_stream(mft_cluster, offset=next_offset)
-            next_offset += res["Length"]
-            yield res
-        except StreamError:
-            return
-
-
-def get_resident_attribute(mft_cluster, attribute_header):
-    mft_cluster.seek(attribute_header["OffsetInCluster"] + attribute_header["AttributeOffset"])
-    return mft_cluster.read(attribute_header["AttributeLength"])
+def get_resident_attribute(mft_chunk, attribute_header):
+    offset = attribute_header["OffsetInChunk"] + attribute_header["Metadata"]["AttributeOffset"]
+    return mft_chunk[offset: offset + attribute_header["Metadata"]["AttributeLength"]]
 
 
 def get_attribute_type(attribute_header):
-    """
-    Get the type of an attribute
-    :param attribute_header: the attribute header of your attribute
-    :return: the attribute's type
-    """
     return attribute_header["Type"]
 
 
-def get_attribute_name(mft_cluster, attribute_header):
-    """
-    Get the name of an attribute. Doesn't work on unnamed attributes!
-    :param mft_cluster: raw mft cluster
-    :param attribute_header: attribute header of your attribute
-    :return: the name of your attribute
-    """
-    mft_cluster.seek(attribute_header["OffsetInCluster"] + attribute_header["NameOffset"])
-    name_length = 2 * attribute_header["NameLength"]
-    return PaddedString(name_length, "utf16").parse(mft_cluster.read(name_length))
+def get_attribute_name(attribute_header):
+    return attribute_header["AttributeName"]
 
 
 def is_resident(attribute_header):
-    """
-    Determine if an attribute is resident
-    :param attribute_header: the attribute header of your attribute
-    :return: True if resident, false otherwise
-    """
-    return attribute_header["NonResidentFlag"] == "RESIDENT"
+    return attribute_header["Residence"]["RESIDENT"]
 
 
 def get_attribute_header(attribute_headers, attribute_type):
-    """
-    Get a specific attribute header from an attribute header list
-    :param attribute_headers: an attribute header list
-    :param attribute_type: the attribute's type
-    :return: an attribute header of the type specified
-    """
     for attribute_header in attribute_headers:
         if attribute_header["Type"] == attribute_type:
-            return attribute_header
+            yield attribute_header
 
 
 def parse_filename_attribute(filename_attribute):
     return FILENAME_ATTRIBUTE.parse(filename_attribute)
 
 
-def get_non_resident_attribute(vbr, raw_image, mft_cluster, attribute_header):
-    """
-    Get an attribute object from an attribute header, for non resident attributes only
-    :param vbr: the NTFS volume's VBR object
-    :param raw_image: file object for the raw partition
-    :param mft_cluster: the raw mft cluster
-    :param attribute_header: the attribute header of your attribute
-    :return: a stream object for your non resident attribute
-    """
-    if attribute_header["AllocatedSize"] == 0 or attribute_header["RealSize"] == 0:
+def get_non_resident_attribute(vbr, raw_image, mft_chunk, attribute_header):
+    if attribute_header["Metadata"]["AllocatedSize"] == 0 or attribute_header["Metadata"]["RealSize"] == 0:
         raise EmptyNonResidentAttributeError
 
-    dataruns = get_dataruns(mft_cluster, attribute_header["OffsetInCluster"] + attribute_header["DataRunsOffset"])
+    dataruns_offset_in_chunk = attribute_header["OffsetInChunk"] + attribute_header["Metadata"]["DataRunsOffset"]
+    dataruns = get_dataruns(mft_chunk, dataruns_offset_in_chunk)
     return NonResidentStream(vbr["BytsPerClus"], vbr["OffsetInImage"], raw_image, dataruns)
 
 
+def is_first_record_valid(record_header):
+    if not is_valid_record_signature(record_header):
+        sys_exit(f"INDXRipper: error: invalid 'FILE' signature in first file record")
+
+    if not is_valid_fixup(record_header):
+        sys_exit(f"INDXRipper: error: fixup verification failed for first file record")
+
+    return True
+
+
 def get_mft_data_attribute(vbr, raw_image):
-    mft_cluster = _get_first_mft_cluster(vbr, raw_image)
-    mft_cluster = apply_file_record_fixup(mft_cluster, vbr)
-    record_headers = get_record_headers(mft_cluster, vbr)
-    attribute_headers = get_attribute_headers(mft_cluster, next(record_headers))
-    mft_data_attribute_header = get_attribute_header(attribute_headers, "DATA")
-    return get_non_resident_attribute(vbr, raw_image, mft_cluster, mft_data_attribute_header)
+    mft_chunk = get_first_mft_chunk(vbr, raw_image)
+    record_headers = get_record_headers(mft_chunk, vbr)
+    apply_fixup(mft_chunk, record_headers, vbr)
+    if is_first_record_valid(record_headers[0]):
+        attribute_headers = get_attribute_headers(mft_chunk, record_headers[0])
+        mft_data_attribute_header = next(get_attribute_header(attribute_headers, "DATA"))
+        return get_non_resident_attribute(vbr, raw_image, mft_chunk, mft_data_attribute_header)
 
 
-def get_mft_clusters(vbr, mft_data_attribute_stream):
+def get_mft_chunks(vbr, mft_data_attribute_stream):
     mft_data_attribute_stream.seek(0)
-    while current_cluster := mft_data_attribute_stream.read(vbr["BytsPerMftCluster"]):
-        yield current_cluster
+    while current_chunk := mft_data_attribute_stream.read(vbr["BytsPerMftChunk"]):
+        yield current_chunk
