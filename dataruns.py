@@ -5,7 +5,7 @@
 """
 
 from io import BytesIO
-from construct import Struct, BitStruct, Nibble, BytesInteger, Const, StopIf, Optional, RepeatUntil
+from construct import Struct, BitStruct, Nibble, BytesInteger, Const, StopIf, Optional, RepeatUntil, Seek
 
 END_OF_DATARUNS = b'\x00'
 
@@ -22,12 +22,14 @@ DATA_RUN = Struct(
     "Offset" / BytesInteger(lambda this: this.Header.Offset, swapped=True, signed=True)
 )
 
-DATA_RUNS = RepeatUntil(lambda obj, lst, ctx: obj.EndMark is not None, DATA_RUN)
+DATA_RUNS = Struct(
+    Seek(lambda this: this._.dataruns_offset),
+    "DataRuns" / RepeatUntil(lambda obj, lst, ctx: obj.EndMark is not None, DATA_RUN)
+)
 
 
-def get_dataruns(mft_cluster, offset):
-    mft_cluster.seek(offset)
-    return correct_offsets(DATA_RUNS.parse_stream(mft_cluster)[:-1])
+def get_dataruns(mft_chunk, offset):
+    return correct_offsets(DATA_RUNS.parse(mft_chunk, dataruns_offset=offset)["DataRuns"][:-1])
 
 
 def correct_offsets(dataruns):
