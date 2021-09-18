@@ -69,6 +69,7 @@ https://www.youtube.com/watch?v=0HT1uiP-BRg
 ## Limitations
 * The tool may give false results.
 * Entries that are partially overwritten may not be found. If they are found, though, the tool may give you false information.
+* INDXRipper currently supports NTFS version 3.1 only
 
 ### What this tool doesn't do
 * This tool doesn't process $INDEX_ROOT attributes. You won't see an output for every file on the volume
