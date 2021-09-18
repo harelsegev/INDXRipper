@@ -18,7 +18,10 @@ class EmptyNonResidentAttributeError(ValueError):
 
 BOOT_SECTOR = Struct(
     "OffsetInImage" / Tell,
-    Padding(11),
+    Padding(3),
+    "Magic" / Optional(Const(b'NTFS')),
+    StopIf(lambda this: this.Magic is None),
+    Padding(4),
     "BytsPerSec" / Int16ul,
     "SecPerClus" / Int8ul,
     "BytsPerClus" / Computed(lambda this: this.BytsPerSec * this.SecPerClus),
@@ -164,6 +167,11 @@ def get_boot_sector(raw_image, partition_offset):
     return BOOT_SECTOR.parse_stream(raw_image)
 
 
+def panic_on_invalid_boot_sector(vbr):
+    if vbr["Magic"] is None:
+        sys_exit("INDXRipper: error: invalid volume boot record")
+
+
 def get_mft_offset(vbr):
     return vbr["MftClusNumber"] * vbr["BytsPerClus"] + vbr["OffsetInImage"]
 
@@ -212,12 +220,19 @@ def is_valid_fixup(record_header):
     return record_header["IsValidFixup"]
 
 
+def is_used(record_header):
+    return record_header["Flags"]["IN_USE"]
+
+
 def is_directory(record_header):
     return record_header["Flags"]["DIRECTORY"]
 
 
 def get_sequence_number(record_header):
-    return record_header["SequenceNumber"]
+    if is_used(record_header):
+        return record_header["SequenceNumber"]
+    else:
+        return record_header["SequenceNumber"] - 1
 
 
 def is_base_record(record_header):
@@ -271,24 +286,23 @@ def get_non_resident_attribute(vbr, raw_image, mft_chunk, attribute_header):
     return NonResidentStream(vbr["BytsPerClus"], vbr["OffsetInImage"], raw_image, dataruns)
 
 
-def is_first_record_valid(record_header):
+def panic_on_invalid_first_record(record_header):
     if not is_valid_record_signature(record_header):
         sys_exit(f"INDXRipper: error: invalid 'FILE' signature in first file record")
 
     if not is_valid_fixup(record_header):
         sys_exit(f"INDXRipper: error: fixup verification failed for first file record")
 
-    return True
-
 
 def get_mft_data_attribute(vbr, raw_image):
+    panic_on_invalid_boot_sector(vbr)
     mft_chunk = get_first_mft_chunk(vbr, raw_image)
     record_headers = get_record_headers(mft_chunk, vbr)
     apply_fixup(mft_chunk, record_headers, vbr)
-    if is_first_record_valid(record_headers[0]):
-        attribute_headers = get_attribute_headers(mft_chunk, record_headers[0])
-        mft_data_attribute_header = next(get_attribute_header(attribute_headers, "DATA"))
-        return get_non_resident_attribute(vbr, raw_image, mft_chunk, mft_data_attribute_header)
+    panic_on_invalid_first_record(record_headers[0])
+    attribute_headers = get_attribute_headers(mft_chunk, record_headers[0])
+    mft_data_attribute_header = next(get_attribute_header(attribute_headers, "DATA"))
+    return get_non_resident_attribute(vbr, raw_image, mft_chunk, mft_data_attribute_header)
 
 
 def get_mft_chunks(vbr, mft_data_attribute_stream):
