@@ -72,7 +72,6 @@ FILE_RECORD_HEADER = Struct(
     "Flags" / FlagsEnum(Int16ul, IN_USE=1, DIRECTORY=2),
     Padding(8),
     "BaseRecordReference" / FILE_REFERENCE,
-    "NextAttributeId" / Int16ul,
 
     Seek(lambda this: this.UpdateSequenceOffset + this.OffsetInChunk),
     "UpdateSequenceNumber" / Int16ul,
@@ -98,8 +97,7 @@ ATTRIBUTE_HEADER = Struct(
     "NameOffset" / Int16ul,
     "AttributeName" / Pointer(lambda this: this.NameOffset + this.OffsetInChunk,
                               PaddedString(lambda this: 2 * this.NameLength, "utf16")),
-    Padding(2),
-    "AttributeId" / Int16ul,
+    Padding(4),
     "Metadata" / Switch(
         lambda this: this.Residence,
         {
@@ -129,35 +127,9 @@ ATTRIBUTE_HEADERS = Struct(
 
 FILENAME_ATTRIBUTE = Struct(
     "ParentDirectoryReference" / FILE_REFERENCE,
-    "CreationTime" / Int64ul,
-    "LastModificationTime" / Int64ul,
-    "LastMftChangeTime" / Int64ul,
-    "LastAccessTime" / Int64ul,
-    "AllocatedSize" / Int64ul,
-    "RealSize" / Int64ul,
-    "Flags" / Enum(Int32ul,
-                   READ_ONLY=0x0001,
-                   HIDDEN=0x0002,
-                   SYSTEM=0x0004,
-                   ARCHIVE=0x0020,
-                   DEVICE=0x0040,
-                   NORMAL=0x0080,
-                   TEMPORARY=0x0100,
-                   SPARSE=0x0200,
-                   REPARSE_POINT=0x0400,
-                   COMPRESSED=0x0800,
-                   OFFLINE=0x1000,
-                   NOT_CONTENT_INDEXED=0x2000,
-                   ENCRYPTED=0x4000,
-                   DIRECTORY=0x10000000,
-                   INDEX_VIEW=0x20000000),
-    Padding(4),
+    Padding(56),
     "FilenameLengthInCharacters" / Int8ul,
-    "FilenameNamespace" / Enum(Int8ul,
-                               POSIX=0,
-                               WIN32=1,
-                               DOS=2,
-                               WIN32_DOS=3),
+    "FilenameNamespace" / Enum(Int8ul, POSIX=0, WIN32=1, DOS=2, WIN32_DOS=3),
     "FilenameInUnicode" / PaddedString(lambda this: this.FilenameLengthInCharacters * 2, "utf16")
 )
 
