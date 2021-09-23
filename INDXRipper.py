@@ -3,11 +3,11 @@
     Author: Harel Segev
     05/16/2021
 """
-__version__ = "2.6.3"
+__version__ = "2.6.4"
 
 import argparse
 from sys import stderr
-from datetime import datetime, timedelta, timezone
+from datetime import timezone, datetime
 from contextlib import suppress
 
 from ntfs import parse_filename_attribute, get_resident_attribute, get_attribute_name, get_attribute_type
@@ -19,30 +19,33 @@ from ntfs import get_boot_sector, get_mft_data_attribute, get_base_record_refere
 from indx import find_index_entries
 
 
-class EmptyNameInFilenameAttributeError(ValueError):
-    pass
-
-
 class NoFilenameAttributeInRecordError(ValueError):
     pass
 
 
+DESCRIPTION = "find index entries in $INDEX_ALLOCATION attributes"
+
+HELP_IMAGE = "image file path"
+HELP_OUTPUT_FILE = "output file path"
+HELP_MOUNT_POINT = "a name to display as the mount point of the image, e.g. C:"
+HELP_OFFSET = "offset to an NTFS partition (in sectors)"
+HELP_SECTOR_SIZE = "sector size (in bytes). default is 512"
+HELP_OUTPUT_FORMAT = "output format. default is csv"
+HELP_INVALID_ONLY = "only display entries with an invalid file reference"
+HELP_DEDUP = "deduplicate output lines"
+
+
 def get_arguments():
-    parser = argparse.ArgumentParser(prog="INDXRipper",
-                                     description="find index entries in $INDEX_ALLOCATION attributes")
-    parser.add_argument("image", metavar="image", help=r"image file path")
-    parser.add_argument("outfile", metavar="outfile", help=r"output file path")
+    parser = argparse.ArgumentParser(prog="INDXRipper", description=DESCRIPTION)
+    parser.add_argument("image", metavar="image", help=HELP_IMAGE)
+    parser.add_argument("outfile", metavar="outfile", help=HELP_OUTPUT_FILE)
     parser.add_argument("-V", "--version", action='version', version=f"%(prog)s {__version__}")
-    parser.add_argument("-m", metavar="MOUNT_POINT", default="",
-                        help="a name to display as the mount point of the image, e.g., C:")
-    parser.add_argument("-o", metavar="OFFSET", type=int, default=0,
-                        help="offset to an NTFS partition, in sectors")
-    parser.add_argument("-b", metavar="SECTOR_SIZE", type=int, default=512,
-                        help="sector size in bytes. default is 512")
-    parser.add_argument("--invalid-only", action="store_true",
-                        help="only display entries with an invalid file reference")
-    parser.add_argument("--dedup", action="store_true", help="deduplicate output lines")
-    parser.add_argument("--bodyfile", action="store_true", help="bodyfile output. default is CSV")
+    parser.add_argument("-m", metavar="MOUNT_POINT", default="", help=HELP_MOUNT_POINT)
+    parser.add_argument("-o", metavar="OFFSET", type=int, default=0, help=HELP_OFFSET)
+    parser.add_argument("-b", metavar="SECTOR_SIZE", type=int, default=512, help=HELP_SECTOR_SIZE)
+    parser.add_argument("-w", choices=["csv", "bodyfile"], default="csv", help=HELP_OUTPUT_FORMAT)
+    parser.add_argument("--invalid-only", action="store_true", help=HELP_INVALID_ONLY)
+    parser.add_argument("--dedup", action="store_true", help=HELP_DEDUP)
     return parser.parse_args()
 
 
@@ -77,19 +80,18 @@ def is_directory_index_allocation(attribute_header):
 
 def add_to_mft_values(vbr, raw_image, mft_chunk, attribute_header, values):
     if get_attribute_type(attribute_header) == "FILE_NAME":
-        with suppress(UnicodeError):
-            values["$FILE_NAME"] += [get_filename_attribute_values(mft_chunk, attribute_header)]
+        values["$FILE_NAME"].append(get_filename_attribute_values(mft_chunk, attribute_header))
 
     elif is_directory_index_allocation(attribute_header):
-        with suppress(EmptyNonResidentAttributeError):
-            values["$INDEX_ALLOCATION"] += [get_non_resident_attribute(vbr, raw_image, mft_chunk, attribute_header)]
+        values["$INDEX_ALLOCATION"].append(get_non_resident_attribute(vbr, raw_image, mft_chunk, attribute_header))
 
 
 def get_mft_dict_values(vbr, raw_image, mft_chunk, record_header):
     values = dict({"$FILE_NAME": [], "$INDEX_ALLOCATION": []})
     if is_directory(record_header):
         for attribute_header in get_attribute_headers(mft_chunk, record_header):
-            add_to_mft_values(vbr, raw_image, mft_chunk, attribute_header, values)
+            with suppress(EmptyNonResidentAttributeError):
+                add_to_mft_values(vbr, raw_image, mft_chunk, attribute_header, values)
 
     return values
 
@@ -131,7 +133,7 @@ def get_mft_dict(raw_image, mft_data, vbr):
     return mft_dict
 
 
-NAMESPACE_PRIORITY = {"POSIX": 0, "DOS": 1, "WIN32_DOS": 2, "WIN32": 3}
+NAMESPACE_PRIORITY = {"DOS": 1, "WIN32_DOS": 2, "POSIX": 0, "WIN32": 3}
 
 
 def get_filename_priority(filename):
@@ -170,58 +172,85 @@ def get_path(mft_dict, key, mount_point):
     return mount_point + get_path_helper(mft_dict, key)
 
 
-def to_datetime(filetime):
-    return datetime(1601, 1, 1) + timedelta(microseconds=(filetime / 10))
+def to_epoch(timestamp: datetime):
+    return timestamp.replace(tzinfo=timezone.utc).timestamp()
 
 
-def to_epoch(filetime):
-    return to_datetime(filetime).replace(tzinfo=timezone.utc).timestamp()
+def to_iso(timestamp: datetime):
+    return timestamp.replace(tzinfo=timezone.utc).isoformat()
 
 
-def to_iso(filetime):
-    return to_datetime(filetime).replace(tzinfo=timezone.utc).isoformat()
+COMMON_FIELDS = {
+    "index": lambda index_entry: index_entry["FILE_REFERENCE"]["FileRecordNumber"],
+    "sequence": lambda index_entry: index_entry["FILE_REFERENCE"]["SequenceNumber"],
+
+    "size": lambda index_entry: index_entry["RealSize"],
+    "alloc_size": lambda index_entry: index_entry["AllocatedSize"],
+
+    "cr_time": lambda index_entry: index_entry["CreationTime"],
+    "m_time": lambda index_entry: index_entry["LastModificationTime"],
+    "a_time": lambda index_entry: index_entry["LastAccessTime"],
+    "c_time": lambda index_entry: index_entry["LastMftChangeTime"],
+}
+
+CSV_H = "Path,Flags,FileNumber,SequenceNumber,Size,AllocatedSize,CreationTime,ModificationTime,AccessTime,ChangeTime\n"
+
+OUTPUT_FORMATS = {
+    "csv": {
+        "fmt": "\"{full_path}\",{flags},{index},{sequence},{size},{alloc_size},{cr_time},{m_time},{a_time},{c_time}\n",
+        "header": CSV_H,
+
+        "fields": {
+                      "flags": lambda index_entry: "|".join(
+                          [flag for flag in index_entry["Flags"] if index_entry["Flags"][flag] and flag != "_flagsenum"]
+                      )
+
+                  } | COMMON_FIELDS,
+
+        "adapted_fields": {"cr_time": to_iso, "m_time": to_iso, "a_time": to_iso, "c_time": to_iso},
+    },
+
+    "bodyfile": {
+        "fmt": "0|{full_path} ($I30)|{index}|{mode_prt1}{mode_prt2}|0|0|{size}|{a_time}|{m_time}|{c_time}|{cr_time}\n",
+        "header": "",
+
+        "fields": {
+                      "mode_prt1": lambda index_entry: "d/-" if index_entry["Flags"]["DIRECTORY"] else "r/-",
+                      "mode_prt2": lambda index_entry: 3 * "{}{}{}".format(
+                          "r" if not index_entry["Flags"]["READ_ONLY"] else "-",
+                          "w" if not index_entry["Flags"]["HIDDEN"] else "-",
+                          "x"
+                      )
+
+                  } | COMMON_FIELDS,
+
+        "adapted_fields": {"cr_time": to_epoch, "m_time": to_epoch, "a_time": to_epoch, "c_time": to_epoch},
+    }
+}
 
 
-def get_timestamps_by_format(filename_attribute, out_bodyfile):
-    a_time, c_time = filename_attribute["LastAccessTime"], filename_attribute["LastMftChangeTime"]
-    m_time, cr_time = filename_attribute["LastModificationTime"], filename_attribute["CreationTime"]
+def populate_fmt_dict(fmt_dict, index_entry, output_format):
+    output_fields = OUTPUT_FORMATS[output_format]["fields"]
+    adapted_fields = OUTPUT_FORMATS[output_format]["adapted_fields"]
 
-    if out_bodyfile:
-        return to_epoch(a_time), to_epoch(c_time), to_epoch(m_time), to_epoch(cr_time)
-    else:
-        return to_iso(a_time), to_iso(c_time), to_iso(m_time), to_iso(cr_time)
+    for field in output_fields:
+        fmt_dict[field] = output_fields[field](index_entry)
 
-
-def get_full_path(filename_attribute, parent_path):
-    if not filename_attribute["FilenameLengthInCharacters"]:
-        raise EmptyNameInFilenameAttributeError
-
-    return parent_path + "/" + filename_attribute["FilenameInUnicode"]
+        if field in adapted_fields:
+            fmt_dict[field] = adapted_fields[field](fmt_dict[field])
 
 
-def get_file_size(filename_attribute):
-    return filename_attribute["RealSize"], filename_attribute["AllocatedSize"]
+def get_entry_output(index_entry, parent_path, output_format):
+    fmt_dict = {
+        "full_path": parent_path + "/" + index_entry["FilenameInUnicode"]
+    }
 
-
-def get_output_by_format(filename_attribute, parent_path, index, sequence, out_bodyfile):
-    full_path = get_full_path(filename_attribute, parent_path)
-    size, alloc_size = get_file_size(filename_attribute)
-    a_time, c_time, m_time, cr_time = get_timestamps_by_format(filename_attribute, out_bodyfile)
-
-    if out_bodyfile:
-        return f"0|{full_path} ($I30)|{index}|------------|0|0|{size}|{a_time}|{m_time}|{c_time}|{cr_time}\n"
-    else:
-        return f'"{full_path}",{index},{sequence},{size},{alloc_size},{cr_time},{m_time},{a_time},{c_time}\n'
+    populate_fmt_dict(fmt_dict, index_entry, output_format)
+    return OUTPUT_FORMATS[output_format]["fmt"].format(**fmt_dict)
 
 
 def get_mft_key(index_entry):
     return index_entry["FILE_REFERENCE"]["FileRecordNumber"], index_entry["FILE_REFERENCE"]["SequenceNumber"]
-
-
-def get_entry_output(mft_dict, index_entry, parent_path, invalid_only, out_bodyfile):
-    mft_key = get_mft_key(index_entry)
-    if not invalid_only or mft_key not in mft_dict:
-        return get_output_by_format(index_entry["FILENAME_ATTRIBUTE"], parent_path, *mft_key, out_bodyfile)
 
 
 def get_collection(dedup):
@@ -231,29 +260,27 @@ def get_collection(dedup):
         return list(), list.append
 
 
-def get_record_output(mft_dict, index_entries, parent_path, invalid_only, dedup, out_bodyfile):
+def get_record_output(mft_dict, index_entries, parent_path, invalid_only, dedup, output_format):
     lines, add_line = get_collection(dedup)
 
     for index_entry in index_entries:
-        with suppress(OverflowError, EmptyNameInFilenameAttributeError):
-            if line := get_entry_output(mft_dict, index_entry, parent_path, invalid_only, out_bodyfile):
-                add_line(lines, line)
+        mft_key = get_mft_key(index_entry)
+
+        if not invalid_only or mft_key not in mft_dict:
+            line = get_entry_output(index_entry, parent_path, output_format)
+            add_line(lines, line)
 
     return lines
 
 
-CSV_HEADER = "Path,FileNumber,SequenceNumber,Size,AllocatedSize,CreationTime,ModificationTime,AccessTime,ChangeTime\n"
-
-
-def get_output_lines(mft_dict, vbr, root_name, invalid_only, dedup, out_bodyfile):
-    if not out_bodyfile:
-        yield [CSV_HEADER]
+def get_output_lines(mft_dict, vbr, root_name, invalid_only, dedup, output_format):
+    yield [OUTPUT_FORMATS[output_format]["header"]]
 
     for key in mft_dict:
         for index_allocation in mft_dict[key]["$INDEX_ALLOCATION"]:
             index_entries = find_index_entries(index_allocation, *key, vbr)
             parent_path = get_path(mft_dict, key, root_name)
-            yield get_record_output(mft_dict, index_entries, parent_path, invalid_only, dedup, out_bodyfile)
+            yield get_record_output(mft_dict, index_entries, parent_path, invalid_only, dedup, output_format)
 
 
 def main():
@@ -264,7 +291,7 @@ def main():
         mft_dict = get_mft_dict(raw_image, mft_data, vbr)
 
         with open(args.outfile, 'at+', encoding='utf-8') as outfile:
-            for lines in get_output_lines(mft_dict, vbr, args.m, args.invalid_only, args.dedup, args.bodyfile):
+            for lines in get_output_lines(mft_dict, vbr, args.m, args.invalid_only, args.dedup, args.w):
                 outfile.writelines(lines)
 
 
