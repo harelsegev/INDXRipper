@@ -34,19 +34,21 @@ INDXRipper scans the MFT for records of directories that have an $INDEX_ALLOCATI
 
 ### Super timeline creation
 INDXRipper is best used in combination with other tools to create a super timeline.  
-For this purpose, the **--invalid-only**, **--bodyfile**, and the **--dedup** switches may be useful.
+For this purpose, the **--invalid-only** switch, the **--dedup** switch, and the bodyfile output option may be useful.
 
 #### The --invalid-only switch
-If the --invalid-only switch is given, INDXRipper will only output entries with no valid reference to an MFT record - omitting many of the files that would appear in an MFT timeline. Use this switch for integration with fls or MFTECmd.
+If the --invalid-only switch is given, INDXRipper will only output entries with no valid reference to an MFT record - omitting many of the files that would already  appear in an MFT timeline. Use this switch for integration with fls or MFTECmd.
 * Not all deleted files will be outputted, only the ones that lost their MFT record.
 * You will probably see output for files that still have their MFT record - some of them may not even be deleted! This happens because NTFS moves the index entries around to keep them sorted. This means there are old, unallocated entries for active files. The file reference in these unallocated entries may be overwritten and become invalid, causing them to be outputted, despite the file being active.
 
-#### The --bodyfile and --dedup switches
-* The --bodyfile switch will output a bodyfile, for integration with other tools that produce a bodyfile.
-* The --dedup switch will deduplicate output lines. This is useful because INDXRipper may find multiple identical entries, due to index entry reallocation.
+#### The --dedup switch
+The --dedup switch will deduplicate output lines. This is useful because INDXRipper may find multiple identical entries, due to index entry reallocation.
+
+#### The bodyfile output option
+The **-w** argument lets you choose an output format. There is an option for bodyfile output for integration with the fls, and other tools that produce a bodyfile. Note that the bodyfile format is specific to The Sleuth Kit and is only partially documented, so INDXRipper's bodyfile output is not fully compatible with The Sleuth Kit bodyfile output.
 
 ## Installation 
-Python 3.8 or above is required.  
+Python 3.9 or above is required.  
 Use the package manager [pip](https://pip.pypa.io/en/stable/) to install construct.
 ```bash
 pip install construct==2.10.67
@@ -62,7 +64,7 @@ python INDXRipper.py -o 1026048 raw_disk.dd output.csv
 python INDXRipper.py ntfs.part.001 output.csv
 
 # process the D: drive, --invalid-only mode, bodyfile output, append "D:" to all the paths
-python INDXRipper.py -m D: --invalid-only --bodyfile \\.\D: output.bodyfile
+python INDXRipper.py -m D: --invalid-only -w bodyfile \\.\D: output.bodyfile
 ```
 https://www.youtube.com/watch?v=0HT1uiP-BRg
 
