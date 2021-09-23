@@ -45,7 +45,7 @@ If the --invalid-only switch is given, INDXRipper will only output entries with 
 The --dedup switch will deduplicate output lines. This is useful because INDXRipper may find multiple identical entries, due to index entry reallocation.
 
 #### The bodyfile output option
-The **-w** argument lets you choose an output format. There is an option for bodyfile output for integration with the fls, and other tools that produce a bodyfile. Note that the bodyfile format is specific to The Sleuth Kit and is only partially documented, so INDXRipper's bodyfile output is not fully compatible with The Sleuth Kit bodyfile output.
+The **-w** argument lets you choose an output format. You can choose the bodyfile option for integration with fls, and other tools that produce a bodyfile. Note that the bodyfile format is specific to The Sleuth Kit and is only partially documented, so INDXRipper's bodyfile output is not fully compatible with it.
 
 ## Installation 
 Python 3.9 or above is required.  
