@@ -3,7 +3,7 @@
     Author: Harel Segev
     05/16/2021
 """
-__version__ = "2.6.4"
+__version__ = "3.0.0"
 
 import argparse
 from sys import stderr
@@ -23,29 +23,25 @@ class NoFilenameAttributeInRecordError(ValueError):
     pass
 
 
-DESCRIPTION = "find index entries in $INDEX_ALLOCATION attributes"
-
-HELP_IMAGE = "image file path"
-HELP_OUTPUT_FILE = "output file path"
-HELP_MOUNT_POINT = "a name to display as the mount point of the image, e.g. C:"
-HELP_OFFSET = "offset to an NTFS partition (in sectors)"
-HELP_SECTOR_SIZE = "sector size (in bytes). default is 512"
-HELP_OUTPUT_FORMAT = "output format. default is csv"
-HELP_INVALID_ONLY = "only display entries with an invalid file reference"
-HELP_DEDUP = "deduplicate output lines"
-
-
 def get_arguments():
-    parser = argparse.ArgumentParser(prog="INDXRipper", description=DESCRIPTION)
-    parser.add_argument("image", metavar="image", help=HELP_IMAGE)
-    parser.add_argument("outfile", metavar="outfile", help=HELP_OUTPUT_FILE)
+    parser = argparse.ArgumentParser(prog="INDXRipper",
+                                     description="find index entries in $INDEX_ALLOCATION attributes")
+
+    parser.add_argument("image", metavar="image", help="image file path")
+    parser.add_argument("outfile", metavar="outfile", help="output file path")
     parser.add_argument("-V", "--version", action='version', version=f"%(prog)s {__version__}")
-    parser.add_argument("-m", metavar="MOUNT_POINT", default="", help=HELP_MOUNT_POINT)
-    parser.add_argument("-o", metavar="OFFSET", type=int, default=0, help=HELP_OFFSET)
-    parser.add_argument("-b", metavar="SECTOR_SIZE", type=int, default=512, help=HELP_SECTOR_SIZE)
-    parser.add_argument("-w", choices=["csv", "bodyfile"], default="csv", help=HELP_OUTPUT_FORMAT)
-    parser.add_argument("--invalid-only", action="store_true", help=HELP_INVALID_ONLY)
-    parser.add_argument("--dedup", action="store_true", help=HELP_DEDUP)
+
+    parser.add_argument("-m", metavar="MOUNT_POINT", default="",
+                        help="a name to display as the mount point of the image, e.g. C:")
+
+    parser.add_argument("-o", metavar="OFFSET", type=int, default=0, help="offset to an NTFS partition (in sectors)")
+    parser.add_argument("-b", metavar="SECTOR_SIZE", type=int, default=512, help="sector size in bytes. default is 512")
+    parser.add_argument("-w", choices=["csv", "bodyfile"], default="csv", help="output format. default is csv")
+
+    parser.add_argument("--invalid-only", action="store_true",
+                        help="only display entries with an invalid file reference")
+
+    parser.add_argument("--dedup", action="store_true", help="deduplicate output lines")
     return parser.parse_args()
 
 
@@ -112,12 +108,14 @@ def get_mft_records(mft_data, vbr):
                 yield current_record, get_sequence_number(record_header), mft_chunk, record_header
 
 
-def add_to_mft_dict(mft_dict, key, values):
+def add_to_mft_dict(mft_dict, key, values, base_record):
     if key not in mft_dict:
         mft_dict[key] = values
+        mft_dict[key]["HAS_BASE_RECORD"] = base_record
     else:
         mft_dict[key]["$INDEX_ALLOCATION"] += values["$INDEX_ALLOCATION"]
         mft_dict[key]["$FILE_NAME"] += values["$FILE_NAME"]
+        mft_dict[key]["HAS_BASE_RECORD"] = mft_dict[key]["HAS_BASE_RECORD"] or base_record
 
 
 def get_mft_dict(raw_image, mft_data, vbr):
@@ -125,10 +123,10 @@ def get_mft_dict(raw_image, mft_data, vbr):
     for index, sequence, mft_chunk, record_header in get_mft_records(mft_data, vbr):
         values = get_mft_dict_values(vbr, raw_image, mft_chunk, record_header)
         if is_base_record(record_header):
-            add_to_mft_dict(mft_dict, (index, sequence), values)
+            add_to_mft_dict(mft_dict, (index, sequence), values, True)
         else:
             base_reference = get_base_record_reference(record_header)
-            add_to_mft_dict(mft_dict, base_reference, values)
+            add_to_mft_dict(mft_dict, base_reference, values, False)
 
     return mft_dict
 
@@ -193,36 +191,41 @@ COMMON_FIELDS = {
     "c_time": lambda index_entry: index_entry["LastMftChangeTime"],
 }
 
-CSV_H = "Path,Flags,FileNumber,SequenceNumber,Size,AllocatedSize,CreationTime,ModificationTime,AccessTime,ChangeTime\n"
-
 OUTPUT_FORMATS = {
-    "csv": {
+    "csv":
+    {
         "fmt": "\"{full_path}\",{flags},{index},{sequence},{size},{alloc_size},{cr_time},{m_time},{a_time},{c_time}\n",
-        "header": CSV_H,
+        "header": "Path,Flags,FileNumber,SequenceNumber,Size,AllocatedSize,CreationTime,ModificationTime,AccessTime,"
+                  "ChangeTime\n",
 
-        "fields": {
-                      "flags": lambda index_entry: "|".join(
-                          [flag for flag in index_entry["Flags"] if index_entry["Flags"][flag] and flag != "_flagsenum"]
-                      )
+        "fields":
+        {
+            "flags": lambda index_entry: "|".join
+            (
+                [flag for flag in index_entry["Flags"] if index_entry["Flags"][flag] and flag != "_flagsenum"]
+            )
 
-                  } | COMMON_FIELDS,
+        } | COMMON_FIELDS,
 
-        "adapted_fields": {"cr_time": to_iso, "m_time": to_iso, "a_time": to_iso, "c_time": to_iso},
+        "adapted_fields": {"cr_time": to_iso, "m_time": to_iso, "a_time": to_iso, "c_time": to_iso}
     },
 
-    "bodyfile": {
+    "bodyfile":
+    {
         "fmt": "0|{full_path} ($I30)|{index}|{mode_prt1}{mode_prt2}|0|0|{size}|{a_time}|{m_time}|{c_time}|{cr_time}\n",
         "header": "",
 
-        "fields": {
-                      "mode_prt1": lambda index_entry: "d/-" if index_entry["Flags"]["DIRECTORY"] else "r/-",
-                      "mode_prt2": lambda index_entry: 3 * "{}{}{}".format(
-                          "r" if not index_entry["Flags"]["READ_ONLY"] else "-",
-                          "w" if not index_entry["Flags"]["HIDDEN"] else "-",
-                          "x"
-                      )
+        "fields":
+        {
+            "mode_prt1": lambda index_entry: "d/-" if index_entry["Flags"]["DIRECTORY"] else "r/-",
+            "mode_prt2": lambda index_entry: 3 * "{}{}{}".format
+            (
+              "r" if not index_entry["Flags"]["READ_ONLY"] else "-",
+              "w" if not index_entry["Flags"]["HIDDEN"] else "-",
+              "x"
+            )
 
-                  } | COMMON_FIELDS,
+        } | COMMON_FIELDS,
 
         "adapted_fields": {"cr_time": to_epoch, "m_time": to_epoch, "a_time": to_epoch, "c_time": to_epoch},
     }
@@ -266,7 +269,7 @@ def get_record_output(mft_dict, index_entries, parent_path, invalid_only, dedup,
     for index_entry in index_entries:
         mft_key = get_mft_key(index_entry)
 
-        if not invalid_only or mft_key not in mft_dict:
+        if not invalid_only or mft_key not in mft_dict or not mft_dict[mft_key]["HAS_BASE_RECORD"]:
             line = get_entry_output(index_entry, parent_path, output_format)
             add_line(lines, line)
 
