@@ -45,7 +45,7 @@ If the --invalid-only switch is given, INDXRipper will only output entries with 
 The --dedup switch will deduplicate output lines. This is useful because INDXRipper may find multiple identical entries, due to index entry reallocation.
 
 #### The bodyfile output option
-The **-w** argument lets you choose an output format. You can choose the bodyfile option for integration with fls, and other tools that produce a bodyfile. Note that the bodyfile format is specific to The Sleuth Kit and is only partially documented, so INDXRipper's bodyfile output is not fully compatible with it.
+The **-w** argument lets you specify an output format. Choose the bodyfile option for integration with fls, and other tools that produce a bodyfile. Note that the bodyfile format is specific to The Sleuth Kit and is not fully documented, so INDXRipper's bodyfile output is not entirely compatible with it.
 
 ## Installation 
 Python 3.9 or above is required.  
@@ -53,7 +53,7 @@ Use the package manager [pip](https://pip.pypa.io/en/stable/) to install constru
 ```bash
 pip install construct==2.10.67
 ```
-Alternatively, you can use the Windows standalone executable. 
+Alternatively, you can use the Windows packaged release. 
 
 ## Usage
 ```bash
@@ -61,17 +61,17 @@ Alternatively, you can use the Windows standalone executable.
 python INDXRipper.py -o 1026048 raw_disk.dd output.csv
 
 # process a partition image, get all index entries
-python INDXRipper.py ntfs.part.001 output.csv
+python INDXRipper.py ntfs.001 output.csv
 
 # process the D: drive, --invalid-only mode, bodyfile output, append "D:" to all the paths
-python INDXRipper.py -m D: --invalid-only -w bodyfile \\.\D: output.bodyfile
+python INDXRipper.py -m D: -w bodyfile --invalid-only  \\.\D: output.bodyfile
 ```
 https://www.youtube.com/watch?v=0HT1uiP-BRg
 
 ## Limitations
 * The tool may give false results.
 * Entries that are partially overwritten may not be found. If they are found, though, the tool may give you false information.
-* INDXRipper currently supports NTFS version 3.1 only
+* The tool currently supports NTFS version 3.1 only
 
 ### What this tool doesn't do
 * This tool doesn't process $INDEX_ROOT attributes. You won't see an output for every file on the volume
