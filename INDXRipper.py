@@ -3,7 +3,7 @@
     Author: Harel Segev
     05/16/2021
 """
-__version__ = "3.0.0"
+__version__ = "3.0.1"
 
 import argparse
 from sys import stderr
@@ -62,28 +62,20 @@ def get_filename_attribute(mft_chunk, attribute_header):
     return parse_filename_attribute(get_resident_attribute(mft_chunk, attribute_header))
 
 
-def get_filename_attribute_values(mft_chunk, attribute_header):
-    filename_attribute = get_filename_attribute(mft_chunk, attribute_header)
-    parent_index, parent_sequence = get_parent_reference(filename_attribute)
-    filename, namespace = filename_attribute["FilenameInUnicode"], filename_attribute["FilenameNamespace"]
-    return {"PARENT_REFERENCE": (parent_index, parent_sequence), "FILENAME": filename, "NAMESPACE": namespace}
-
-
 def is_directory_index_allocation(attribute_header):
-    res = get_attribute_type(attribute_header) == "INDEX_ALLOCATION"
-    return res and get_attribute_name(attribute_header) == "$I30"
+    return get_attribute_type(attribute_header) == "INDEX_ALLOCATION" and get_attribute_name(attribute_header) == "$I30"
 
 
 def add_to_mft_values(vbr, raw_image, mft_chunk, attribute_header, values):
     if get_attribute_type(attribute_header) == "FILE_NAME":
-        values["$FILE_NAME"].append(get_filename_attribute_values(mft_chunk, attribute_header))
+        values["$FILE_NAME"].append(get_filename_attribute(mft_chunk, attribute_header))
 
     elif is_directory_index_allocation(attribute_header):
         values["$INDEX_ALLOCATION"].append(get_non_resident_attribute(vbr, raw_image, mft_chunk, attribute_header))
 
 
 def get_mft_dict_values(vbr, raw_image, mft_chunk, record_header):
-    values = dict({"$FILE_NAME": [], "$INDEX_ALLOCATION": []})
+    values = {"$FILE_NAME": [], "$INDEX_ALLOCATION": []}
     if is_directory(record_header):
         for attribute_header in get_attribute_headers(mft_chunk, record_header):
             with suppress(EmptyNonResidentAttributeError):
@@ -131,11 +123,11 @@ def get_mft_dict(raw_image, mft_data, vbr):
     return mft_dict
 
 
-NAMESPACE_PRIORITY = {"DOS": 1, "WIN32_DOS": 2, "POSIX": 0, "WIN32": 3}
+NAMESPACE_PRIORITY = {"DOS": 0, "POSIX": 1, "WIN32_DOS": 2, "WIN32": 3}
 
 
 def get_filename_priority(filename):
-    return NAMESPACE_PRIORITY[filename["NAMESPACE"]]
+    return NAMESPACE_PRIORITY[filename["FilenameNamespace"]]
 
 
 def get_first_filename(mft_dict, key):
@@ -145,7 +137,7 @@ def get_first_filename(mft_dict, key):
         raise NoFilenameAttributeInRecordError
 
 
-path_cache = dict({(5, 5): ""})
+path_cache = {(5, 5): ""}
 
 
 def get_path_helper(mft_dict, key):
@@ -158,7 +150,8 @@ def get_path_helper(mft_dict, key):
     else:
         try:
             filename = get_first_filename(mft_dict, key)
-            path_cache[key] = get_path_helper(mft_dict, filename["PARENT_REFERENCE"]) + "/" + filename["FILENAME"]
+            parent_reference = get_parent_reference(filename)
+            path_cache[key] = get_path_helper(mft_dict, parent_reference) + "/" + filename["FilenameInUnicode"]
 
         except NoFilenameAttributeInRecordError:
             path_cache[key] = "/$NoName/[FileNumber: {}, SequenceNumber: {}]".format(*key)
