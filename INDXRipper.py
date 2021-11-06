@@ -7,7 +7,6 @@ __version__ = "4.0.0"
 
 import argparse
 from sys import stderr
-from datetime import timezone, datetime
 from contextlib import suppress
 
 from ntfs import parse_filename_attribute, get_resident_attribute, get_attribute_name, get_attribute_type
@@ -17,6 +16,7 @@ from ntfs import get_mft_chunks, get_record_headers, apply_fixup, get_sequence_n
 from ntfs import get_boot_sector, get_mft_data_attribute, get_base_record_reference, is_base_record
 
 from indx import find_index_entries
+from fmt import get_entry_output, get_format_header
 
 
 class NoFilenameAttributeInRecordError(ValueError):
@@ -25,7 +25,7 @@ class NoFilenameAttributeInRecordError(ValueError):
 
 def get_arguments():
     parser = argparse.ArgumentParser(prog="INDXRipper",
-                                     description="carve file metadata from NTFS $INDEX_ALLOCATION attributes")
+                                     description="carve file metadata from NTFS $I30 indexes")
 
     parser.add_argument("image", metavar="image", help="image file path")
     parser.add_argument("outfile", metavar="outfile", help="output file path")
@@ -106,10 +106,9 @@ def add_to_mft_dict(mft_dict, key, values, base_record):
         mft_dict[key] = values
         mft_dict[key]["HAS_BASE_RECORD"] = base_record
     else:
-        mft_dict[key]["$INDEX_ALLOCATION"] += values["$INDEX_ALLOCATION"]
-        mft_dict[key]["$FILE_NAME"] += values["$FILE_NAME"]
-        mft_dict[key]["PARENT_REFERENCE"] += values["PARENT_REFERENCE"]
         mft_dict[key]["HAS_BASE_RECORD"] = mft_dict[key]["HAS_BASE_RECORD"] or base_record
+        for attr in ["$INDEX_ALLOCATION", "$FILE_NAME", "PARENT_REFERENCE"]:
+            mft_dict[key][attr] += values[attr]
 
 
 def get_mft_dict(raw_image, mft_data, vbr):
@@ -172,96 +171,6 @@ def get_path(mft_dict, key, mount_point):
     return mount_point + get_path_helper(mft_dict, key)
 
 
-def to_epoch(timestamp: datetime):
-    return timestamp.replace(tzinfo=timezone.utc).timestamp()
-
-
-def to_iso(timestamp: datetime):
-    return timestamp.replace(tzinfo=timezone.utc).isoformat()
-
-
-COMMON_FIELDS = {
-    "index": lambda index_entry: index_entry["FILE_REFERENCE"]["FileRecordNumber"],
-    "sequence": lambda index_entry: index_entry["FILE_REFERENCE"]["SequenceNumber"],
-
-    "size": lambda index_entry: index_entry["RealSize"],
-    "alloc_size": lambda index_entry: index_entry["AllocatedSize"],
-
-    "cr_time": lambda index_entry: index_entry["CreationTime"],
-    "m_time": lambda index_entry: index_entry["LastModificationTime"],
-    "a_time": lambda index_entry: index_entry["LastAccessTime"],
-    "c_time": lambda index_entry: index_entry["LastMftChangeTime"],
-}
-
-OUTPUT_FORMATS = {
-    "csv":
-    {
-        "fmt": "\"{full_path}\",{flags},{comment},{index},{sequence},{size},{alloc_size},{cr_time},{m_time},{a_time},"
-               "{c_time}\n",
-
-        "header": "Path,Flags,Comment,FileNumber,SequenceNumber,Size,AllocatedSize,CreationTime,ModificationTime,"
-                  "AccessTime,ChangeTime\n",
-
-        "comment_fmt": lambda comment: comment,
-
-        "fields":
-        {
-            "flags": lambda index_entry: "|".join
-            (
-                [flag for flag in index_entry["Flags"] if index_entry["Flags"][flag] and flag != "_flagsenum"]
-            )
-
-        } | COMMON_FIELDS,
-
-        "adapted_fields": {"cr_time": to_iso, "m_time": to_iso, "a_time": to_iso, "c_time": to_iso}
-    },
-
-    "bodyfile":
-    {
-        "fmt": "0|{full_path} ($I30){comment}|{index}|{mode_prt1}{mode_prt2}|0|0|{size}|{a_time}|{m_time}|"
-               "{c_time}|{cr_time}\n",
-
-        "header": "",
-        "comment_fmt": lambda comment: f" ({comment})" if comment else "",
-
-        "fields":
-        {
-            "mode_prt1": lambda index_entry: "d/-" if index_entry["Flags"]["DIRECTORY"] else "r/-",
-            "mode_prt2": lambda index_entry: 3 * "{}{}{}".format
-            (
-              "r" if not index_entry["Flags"]["READ_ONLY"] else "-",
-              "w" if not index_entry["Flags"]["HIDDEN"] else "-",
-              "x"
-            )
-
-        } | COMMON_FIELDS,
-
-        "adapted_fields": {"cr_time": to_epoch, "m_time": to_epoch, "a_time": to_epoch, "c_time": to_epoch}
-    }
-}
-
-
-def populate_fmt_dict(fmt_dict, index_entry, output_format):
-    output_fields = OUTPUT_FORMATS[output_format]["fields"]
-    adapted_fields = OUTPUT_FORMATS[output_format]["adapted_fields"]
-
-    for field in output_fields:
-        fmt_dict[field] = output_fields[field](index_entry)
-
-        if field in adapted_fields:
-            fmt_dict[field] = adapted_fields[field](fmt_dict[field])
-
-
-def get_entry_output(index_entry, parent_path, output_format, comment):
-    fmt_dict = {
-        "full_path": parent_path + "/" + index_entry["FilenameInUnicode"],
-        "comment": OUTPUT_FORMATS[output_format]["comment_fmt"](comment)
-    }
-
-    populate_fmt_dict(fmt_dict, index_entry, output_format)
-    return OUTPUT_FORMATS[output_format]["fmt"].format(**fmt_dict)
-
-
 def get_mft_key(index_entry):
     return index_entry["FILE_REFERENCE"]["FileRecordNumber"], index_entry["FILE_REFERENCE"]["SequenceNumber"]
 
@@ -273,13 +182,14 @@ def get_collection(dedup):
         return list(), list.append
 
 
-def why_is_entry_invalid(mft_dict, mft_key, parent_key):
+def get_entry_comment(mft_dict, mft_key, parent_key):
     if mft_key in mft_dict and mft_dict[mft_key]["HAS_BASE_RECORD"]:
         if parent_key not in mft_dict[mft_key]["PARENT_REFERENCE"]:
             return "old path"
-        return ""  # entry is valid
-    else:
-        return "invalid file reference"
+
+        return ""
+
+    return "invalid reference"
 
 
 def get_record_output(mft_dict, index_entries, parent_path, parent_key, invalid_only, dedup, output_format):
@@ -287,16 +197,17 @@ def get_record_output(mft_dict, index_entries, parent_path, parent_key, invalid_
 
     for index_entry in index_entries:
         mft_key = get_mft_key(index_entry)
+        comment = get_entry_comment(mft_dict, mft_key, parent_key)
 
-        if (reason_is_invalid := why_is_entry_invalid(mft_dict, mft_key, parent_key)) or not invalid_only:
-            line = get_entry_output(index_entry, parent_path, output_format, reason_is_invalid)
+        if comment or not invalid_only:
+            line = get_entry_output(index_entry, parent_path, output_format, comment)
             add_line(lines, line)
 
     return lines
 
 
 def get_output_lines(mft_dict, vbr, root_name, invalid_only, dedup, output_format):
-    yield [OUTPUT_FORMATS[output_format]["header"]]
+    yield [get_format_header(output_format)]
 
     for key in mft_dict:
         for index_allocation in mft_dict[key]["$INDEX_ALLOCATION"]:
