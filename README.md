@@ -39,7 +39,7 @@ python INDXRipper.py -m D: -w bodyfile --invalid-only  \\.\D: output.bodyfile
 ```
 ### Creating a super timeline
 
-INDXRipper is best used in combination with other tools to create a super timeline. For this purpose, the **--invalid-only** switch, the **--dedup** switch, and the bodyfile output option are particularly useful.
+INDXRipper is best used in combination with other tools to create a super timeline. The **--invalid-only** switch should filter out most of the files that will be found by fls, or an MFT parser. you may also use the **--dedup** switch, and the bodyfile output option.
 
 ```bash
 # fls from the sleuthkit
@@ -55,13 +55,13 @@ https://www.youtube.com/watch?v=0HT1uiP-BRg
 
 
 
-#### Bodyfile output
+#### The bodyfile output
 
-Note that the bodyfile format is specific to The Sleuth Kit and is not fully documented. INDXRipper's bodyfile output is not entirely compatible with it.
+Note that the bodyfile format is specific to The Sleuth Kit and is not entirely documented. INDXRipper's bodyfile output is not fully compatible with it.
 
 ## Features and Details
 
-### Basic Features
+### Basic features
 * Applies fixups for index records and MFT records
 * Handles $INDEX_ALLOCATION and $FILE_NAME attributes in extension records
 * Full paths are reconstructed using the parent directory references from the MFT records.
@@ -70,24 +70,24 @@ Note that the bodyfile format is specific to The Sleuth Kit and is not fully doc
 * Works on live Windows NTFS drives, using device paths
 * All times outputted are in UTC
 
-### Carving Method
+### Carving method
 
 INDXRipper scans the MFT for records of directories that have an $INDEX_ALLOCATION attribute. If it finds such a record, it searches the attribute for the directory's file reference. The index entries in the attribute should contain this file reference.
 
-### Invalid Entries
+### Invalid entries
 
 INDXRipper will comment on invalid entries. These are the possible comments, their meanings, and some analysis tips:
 
-* **invalid file reference**  
+* **invalid reference**  
   This entry doesn't reference a valid MFT record.
 
   * If the file number and sequence number seem reasonable, The file was deleted, and its MFT record was reused.
-  * If the file number is 0, or some absurdly high number - like 8589934608, it says nothing about the file. Its MFT record might or might not have been reused. The file may be deleted, or active.
+  * If the file number is 0, or some absurdly high number - like 8589934608, it says nothing about the file.
 
 * **old path**  
   This entry references a valid MFT record, but the MFT record doesn't reference the directory the entry is in as a parent directory.
   * The file has been moved from this directory to another directory. It may be deleted or active
-  * If the file is deleted, it has a $ATTRIBUTE_LIST attribute, and it had a $FILE_NAME attribute in an extension record, it might or might not have been moved to another directory.
+  * If the file is deleted, it has a $ATTRIBUTE_LIST attribute, and it had a $FILE_NAME attribute in an extension record, it might not have been moved to another directory.
 
 
 
