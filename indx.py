@@ -106,7 +106,9 @@ def get_index_entries(indx_record, parent_index, parent_sequence):
     indx_record_stream = BytesIO(indx_record)
 
     for offset in find_parent_reference_offsets(indx_record, parent_index, parent_sequence):
-        if (entry_offset := offset - FILENAME_ATTRIBUTE_OFFSET_IN_ENTRY) >= 0:
+        entry_offset = offset - FILENAME_ATTRIBUTE_OFFSET_IN_ENTRY
+
+        if entry_offset >= 0:
             indx_record_stream.seek(entry_offset)
 
             with suppress(StreamError, OverflowError, CheckError, UnicodeDecodeError):
