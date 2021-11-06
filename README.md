@@ -86,9 +86,8 @@ INDXRipper will comment on invalid entries. These are the possible comments, the
 
 * **old path**  
   This entry references a valid MFT record, but the MFT record doesn't reference the directory the entry is in as a parent directory.
-  * If the file is active, it has been moved from this directory to another directory.
-  * If the file is deleted, and it doesn't have a $ATTRIBUTE_LIST attribute, it has been moved from this directory to another directory.
-  * If the file is deleted, and it has a $ATTRIBUTE_LIST attribute, it might or might not have been moved to another directory.
+  * The file has been moved from this directory to another directory. It may be deleted or active
+  * If the file is deleted, it has a $ATTRIBUTE_LIST attribute, and it had a $FILE_NAME attribute in an extension record, it might or might not have been moved to another directory.
 
 
 
