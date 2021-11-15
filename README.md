@@ -84,10 +84,15 @@ INDXRipper will comment on invalid entries. These are the possible comments, the
   * If the file number and sequence number seem reasonable, The file was deleted, and its MFT record was reused.
   * If the file number is 0, or some absurdly high number - like 8589934608, it says nothing about the file.
 
+
+* **deleted**  
+  This entry references an unallocated MFT record.
+  * The file was deleted.
+
+
 * **old path**  
-  This entry references a valid MFT record, but the MFT record doesn't reference the directory the entry is in as a parent directory.
-  * The file has been moved from this directory to another directory. It may be deleted or active
-  * If the file is deleted, it has a $ATTRIBUTE_LIST attribute, and it had a $FILE_NAME attribute in an extension record, it might not have been moved to another directory.
+  This entry references an allocated MFT record, but the MFT record doesn't reference the directory the entry is in as a parent directory.
+  * The file is active, and has been moved from this directory to another directory.
 
 
 
