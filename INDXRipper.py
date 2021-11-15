@@ -3,14 +3,14 @@
     Author: Harel Segev
     05/16/2021
 """
-__version__ = "4.0.0"
+__version__ = "4.1.0"
 
 import argparse
 from sys import stderr
 from contextlib import suppress
 
 from ntfs import parse_filename_attribute, get_resident_attribute, get_attribute_name, get_attribute_type
-from ntfs import is_valid_fixup, is_valid_record_signature, get_attribute_headers
+from ntfs import is_valid_fixup, is_valid_record_signature, get_attribute_headers, is_used
 from ntfs import EmptyNonResidentAttributeError, get_non_resident_attribute, is_directory
 from ntfs import get_mft_chunks, get_record_headers, apply_fixup, get_sequence_number
 from ntfs import get_boot_sector, get_mft_data_attribute, get_base_record_reference, is_base_record
@@ -101,12 +101,14 @@ def get_mft_records(mft_data, vbr):
                 yield current_record, get_sequence_number(record_header), mft_chunk, record_header
 
 
-def add_to_mft_dict(mft_dict, key, values, base_record):
+def add_to_mft_dict(mft_dict, key, values, base_record, is_record_used):
     if key not in mft_dict:
         mft_dict[key] = values
-        mft_dict[key]["HAS_BASE_RECORD"] = base_record
+        mft_dict[key]["HAS_BASE_RECORD"], mft_dict[key]["IS_USED"] = base_record, is_record_used
     else:
         mft_dict[key]["HAS_BASE_RECORD"] = mft_dict[key]["HAS_BASE_RECORD"] or base_record
+        mft_dict[key]["IS_USED"] = mft_dict[key]["IS_USED"] or is_record_used
+
         for attr in ["$INDEX_ALLOCATION", "$FILE_NAME", "PARENT_REFERENCE"]:
             mft_dict[key][attr] += values[attr]
 
@@ -116,10 +118,10 @@ def get_mft_dict(raw_image, mft_data, vbr):
     for index, sequence, mft_chunk, record_header in get_mft_records(mft_data, vbr):
         values = get_mft_dict_values(vbr, raw_image, mft_chunk, record_header)
         if is_base_record(record_header):
-            add_to_mft_dict(mft_dict, (index, sequence), values, True)
+            add_to_mft_dict(mft_dict, (index, sequence), values, True, is_used(record_header))
         else:
             base_reference = get_base_record_reference(record_header)
-            add_to_mft_dict(mft_dict, base_reference, values, False)
+            add_to_mft_dict(mft_dict, base_reference, values, False, False)
 
     return mft_dict
 
@@ -184,10 +186,13 @@ def get_collection(dedup):
 
 def get_entry_comment(mft_dict, mft_key, parent_key):
     if mft_key in mft_dict and mft_dict[mft_key]["HAS_BASE_RECORD"]:
-        if parent_key not in mft_dict[mft_key]["PARENT_REFERENCE"]:
-            return "old path"
+        if mft_dict[mft_key]["IS_USED"]:
+            if parent_key not in mft_dict[mft_key]["PARENT_REFERENCE"]:
+                return "old path"
 
-        return ""
+            return ""
+
+        return "deleted"
 
     return "invalid reference"
 
