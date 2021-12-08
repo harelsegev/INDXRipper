@@ -39,7 +39,7 @@ python INDXRipper.py -m D: -w bodyfile --invalid-only  \\.\D: output.bodyfile
 ```
 ### Creating a super timeline
 
-INDXRipper is best used in combination with other tools to create a super timeline. The **--invalid-only** switch should filter out most of the files that will be found by fls, or an MFT parser. you may also use the **--dedup** switch, and the bodyfile output option.
+INDXRipper is best used in combination with other tools to create a super timeline. The **--invalid-only** switch should filter out data that might not be necessary in your timeline if you use fls, or an MFT parser. you may also use the **--dedup** switch, and the bodyfile output option.
 
 ```bash
 # fls from the sleuthkit
@@ -57,7 +57,7 @@ https://www.youtube.com/watch?v=0HT1uiP-BRg
 
 #### The bodyfile output
 
-Note that the bodyfile format is specific to The Sleuth Kit and is not entirely documented. INDXRipper's bodyfile output is not fully compatible with it.
+Note that the bodyfile format is specific to The Sleuth Kit and is not fully documented. INDXRipper's bodyfile output is not fully compatible with it.
 
 ## Features and Details
 
@@ -76,12 +76,12 @@ INDXRipper scans the MFT for records of directories that have an $INDEX_ALLOCATI
 
 ### Invalid entries
 
-INDXRipper will comment on invalid entries. These are the possible comments, their meanings, and some analysis tips:
+INDXRipper comments on invalid entries. These are the possible comments, their meanings, and some analysis tips:
 
 * **invalid reference**  
   This entry doesn't reference a valid MFT record.
 
-  * If the file number and sequence number seem reasonable, The file was deleted, and its MFT record was reused.
+  * If the file number and sequence seem reasonable - the file was deleted, and its MFT record was reused.
   * If the file number is 0, or some absurdly high number - like 8589934608, it says nothing about the file.
 
 
