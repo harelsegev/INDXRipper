@@ -81,7 +81,7 @@ For every entry in slack space, INDXRipper scans the $INDEX_ALLOCATION attribute
 
 In any other case, the slack entry is outputted.
 
-* The **--slack-only** switch filters out metadata of active files. Old metadata of active files can sometimes be of interest, for example - a previous modification time of an LNK file.
+* The **--slack-only** switch filters out metadata of active files. Old metadata of active files can sometimes be of interest, for example - a previous modification time of an LNK file. Keep this in mind.
 
 ## Limitations
 * The tool may give false results.
