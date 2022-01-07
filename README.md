@@ -79,7 +79,9 @@ INDXRipper scans the MFT for records of directories that have an $INDEX_ALLOCATI
 
 For every entry in slack space, INDXRipper scans the $INDEX_ALLOCATION attribute for an allocated entry with the same file name. If such entry is found, INDXRipper compares the file references in the two entries. If they match, the slack entry is not outputted.
 
-* The **--slack-only** switch filters out old metadata of active files. This old metadata can sometimes be of interest, for example - a previous modification time of an LNK file.
+In any other case, the slack entry is outputted.
+
+* The **--slack-only** switch filters out metadata of active files. Old metadata of active files can sometimes be of interest, for example - a previous modification time of an LNK file.
 
 ## Limitations
 * The tool may give false results.
