@@ -1,18 +1,22 @@
 """
     Output formatting
     Author: Harel Segev
-    11/06/2021
+    31/12/2021
 """
 
-from datetime import timezone, datetime
+from datetime import timezone, datetime, timedelta
 
 
-def to_epoch(timestamp: datetime):
-    return timestamp.replace(tzinfo=timezone.utc).timestamp()
+def to_datetime(timestamp: int):
+    return datetime(1601, 1, 1) + timedelta(microseconds=(timestamp / 10))
 
 
-def to_iso(timestamp: datetime):
-    return timestamp.replace(tzinfo=timezone.utc).isoformat()
+def to_epoch(timestamp: int):
+    return to_datetime(timestamp).replace(tzinfo=timezone.utc).timestamp()
+
+
+def to_iso(timestamp: int):
+    return to_datetime(timestamp).replace(tzinfo=timezone.utc).isoformat()
 
 
 COMMON_FIELDS = {
@@ -28,24 +32,23 @@ COMMON_FIELDS = {
     "c_time": lambda index_entry: index_entry["LastMftChangeTime"],
 }
 
-
 OUTPUT_FORMATS = {
     "csv":
     {
-        "fmt": "\"{full_path}\",{flags},{comment},{index},"
-               "{sequence},{size},{alloc_size},{cr_time},{m_time},{a_time},{c_time}\n",
+        "fmt": "{slack},\"{full_path}\",{flags},{index},{sequence},"
+               "{size},{alloc_size},{cr_time},{m_time},{a_time},{c_time}\n",
 
-        "header": "Path,Flags,Comment,FileNumber,SequenceNumber,Size,"
-                  "AllocatedSize,CreationTime,ModificationTime,AccessTime,ChangeTime\n",
-
-        "comment_fmt": lambda comment: comment,
+        "header": "Source,Path,Flags,FileNumber,SequenceNumber,"
+                  "Size,AllocatedSize,CreationTime,ModificationTime,AccessTime,ChangeTime\n",
 
         "fields":
         {
             "flags": lambda index_entry: "|".join
             (
                 [flag for flag in index_entry["Flags"] if index_entry["Flags"][flag] and flag != "_flagsenum"]
-            )
+            ),
+
+            "slack": lambda index_entry: "Index Slack" if index_entry["IsSlack"] else "Index Record"
 
         } | COMMON_FIELDS,
 
@@ -54,25 +57,26 @@ OUTPUT_FORMATS = {
 
     "bodyfile":
     {
-        "fmt": "0|{full_path} ($I30){comment}|{index}|"
-               "{mode_prt1}{mode_prt2}|0|0|{size}|{a_time}|{m_time}|{c_time}|{cr_time}\n",
+        "fmt": "0|{full_path} ($I30){slack}|{index}|{mode_part1}"
+               "{mode_part2}|0|0|{size}|{a_time}|{m_time}|{c_time}|{cr_time}\n",
 
         "header": "",
-        "comment_fmt": lambda comment: f" ({comment})" if comment else "",
 
         "fields":
         {
-            "mode_prt1": lambda index_entry: "d/-" if index_entry["Flags"]["DIRECTORY"] else "r/-",
-            "mode_prt2": lambda index_entry: 3 * "{}{}{}".format
+            "mode_part1": lambda index_entry: "d/-" if index_entry["Flags"]["DIRECTORY"] else "r/-",
+            "mode_part2": lambda index_entry: 3 * "{}{}{}".format
             (
               "r" if not index_entry["Flags"]["READ_ONLY"] else "-",
               "w" if not index_entry["Flags"]["HIDDEN"] else "-",
               "x"
-            )
+            ),
+
+            "slack": lambda index_entry: " (slack)" if index_entry["IsSlack"] else ""
 
         } | COMMON_FIELDS,
 
-        "adapted_fields": {"cr_time": to_epoch, "m_time": to_epoch, "a_time": to_epoch, "c_time": to_epoch}
+        "adapted_fields": {"cr_time": to_epoch, "m_time": to_epoch, "a_time": to_epoch, "c_time": to_epoch},
     }
 }
 
@@ -88,10 +92,9 @@ def populate_fmt_dict(fmt_dict, index_entry, output_format):
             fmt_dict[field] = adapted_fields[field](fmt_dict[field])
 
 
-def get_entry_output(index_entry, parent_path, output_format, comment):
+def get_entry_output(index_entry, parent_path, output_format):
     fmt_dict = {
-        "full_path": parent_path + "/" + index_entry["FilenameInUnicode"],
-        "comment": OUTPUT_FORMATS[output_format]["comment_fmt"](comment)
+        "full_path": parent_path + "/" + index_entry["FilenameInUnicode"]
     }
 
     populate_fmt_dict(fmt_dict, index_entry, output_format)
