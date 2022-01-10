@@ -37,6 +37,7 @@ def correct_offsets(dataruns):
     while index < len(dataruns):
         dataruns[index].Offset += dataruns[index - 1].Offset
         index += 1
+
     return dataruns
 
 
@@ -66,6 +67,7 @@ class NonResidentStream(BytesIO):
     def jump_to_next_datarun(self):
         if self.dataruns_index == len(self.dataruns) - 1:
             return False
+
         self.dataruns_index += 1
         self.physical_offset = self.current_datarun_offset()
         self.offset_in_datarun = 0
@@ -104,6 +106,7 @@ class NonResidentStream(BytesIO):
     def read(self, size=-1):
         if size == -1:
             size = self.my_size()
+
         return self.read_helper(size)
 
     def tell(self):
@@ -118,8 +121,10 @@ class NonResidentStream(BytesIO):
     def seek(self, offset, whence=0):
         if whence == 0:
             self.seek_helper(offset)
+
         elif whence == 1:
             self.seek_helper(self.tell() + offset)
+
         elif whence == 2:
             self.seek_helper(self.my_size() + offset)
 

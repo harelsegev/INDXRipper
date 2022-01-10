@@ -134,19 +134,20 @@ def get_entry_size(index_entry):
     return index_entry["IndexEntrySize"]
 
 
-def get_all_entries_in_attribute(index_allocation_attribute, parent_reference, vbr):
-    for index_record, record_header in get_index_records(index_allocation_attribute, vbr):
-        slack_offset = get_slack_offset(record_header)
+def get_all_entries(index_allocation_attributes, parent_reference, vbr):
+    for index_allocation_attribute in index_allocation_attributes:
+        for index_record, record_header in get_index_records(index_allocation_attribute, vbr):
+            slack_offset = get_slack_offset(record_header)
 
-        for entry, entry_offset in get_entries_in_record(index_record, parent_reference):
-            entry["IsSlack"] = entry_offset + get_entry_size(entry) >= slack_offset
-            yield entry
+            for entry, entry_offset in get_entries_in_record(index_record, parent_reference):
+                entry["IsSlack"] = entry_offset + get_entry_size(entry) >= slack_offset
+                yield entry
 
 
-def get_slack_entries_in_attribute_helper(index_allocation_attribute, parent_reference, vbr):
+def get_slack_entries_helper(index_allocation_attributes, parent_reference, vbr):
     allocated_entries, slack_entries = {}, []
 
-    for entry in get_all_entries_in_attribute(index_allocation_attribute, parent_reference, vbr):
+    for entry in get_all_entries(index_allocation_attributes, parent_reference, vbr):
         if entry["IsSlack"]:
             slack_entries.append(entry)
         else:
@@ -160,9 +161,9 @@ def get_file_reference(entry):
     return entry["FILE_REFERENCE"]["FileRecordNumber"], entry["FILE_REFERENCE"]["SequenceNumber"]
 
 
-def get_slack_entries_in_attribute(index_allocation_attribute, parent_reference, vbr):
-    allocated_entries, slack_entries = get_slack_entries_in_attribute_helper(
-        index_allocation_attribute,
+def get_slack_entries(index_allocation_attributes, parent_reference, vbr):
+    allocated_entries, slack_entries = get_slack_entries_helper(
+        index_allocation_attributes,
         parent_reference,
         vbr
     )
@@ -178,8 +179,8 @@ def get_slack_entries_in_attribute(index_allocation_attribute, parent_reference,
             yield entry
 
 
-def get_entries_in_attribute(index_allocation_attribute, parent_reference, slack_only, vbr):
+def get_entries(index_allocation_attributes, parent_reference, slack_only, vbr):
     if slack_only:
-        return get_slack_entries_in_attribute(index_allocation_attribute, parent_reference, vbr)
+        return get_slack_entries(index_allocation_attributes, parent_reference, vbr)
     else:
-        return get_all_entries_in_attribute(index_allocation_attribute, parent_reference, vbr)
+        return get_all_entries(index_allocation_attributes, parent_reference, vbr)

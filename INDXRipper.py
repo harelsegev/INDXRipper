@@ -15,7 +15,7 @@ from ntfs import EmptyNonResidentAttributeError, get_non_resident_attribute, is_
 from ntfs import get_mft_chunks, get_record_headers, apply_fixup, get_sequence_number
 from ntfs import get_boot_sector, get_mft_data_attribute, get_base_record_reference, is_base_record
 
-from indx import get_entries_in_attribute
+from indx import get_entries
 from fmt import get_entry_output, get_format_header
 
 
@@ -181,8 +181,8 @@ def get_output_lines(mft_dict, vbr, root_name, slack_only, dedup, output_format)
     yield [get_format_header(output_format)]
 
     for key in mft_dict:
-        for index_allocation in mft_dict[key]["$INDEX_ALLOCATION"]:
-            index_entries = get_entries_in_attribute(index_allocation, key, slack_only, vbr)
+        if index_allocation_attributes := mft_dict[key]["$INDEX_ALLOCATION"]:
+            index_entries = get_entries(index_allocation_attributes, key, slack_only, vbr)
             parent_path = get_path(mft_dict, key, root_name)
             yield get_record_output(index_entries, parent_path, dedup, output_format)
 
