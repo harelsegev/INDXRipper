@@ -7,10 +7,9 @@
 from io import BytesIO
 from construct import Struct, BitStruct, Nibble, BytesInteger, Const, StopIf, Optional, RepeatUntil, Seek
 
-END_OF_DATARUNS = b'\x00'
 
 DATA_RUN = Struct(
-    "EndMark" / Optional(Const(END_OF_DATARUNS)),
+    "EndMark" / Optional(Const(b'\x00')),
     StopIf(lambda this: this.EndMark is not None),
 
     "Header" / BitStruct(

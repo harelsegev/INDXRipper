@@ -250,11 +250,12 @@ def parse_filename_attribute(filename_attribute):
 
 
 def get_non_resident_attribute(vbr, raw_image, mft_chunk, attribute_header):
-    if attribute_header["Metadata"]["AllocatedSize"] == 0 or attribute_header["Metadata"]["RealSize"] == 0:
-        raise EmptyNonResidentAttributeError
-
     dataruns_offset_in_chunk = attribute_header["OffsetInChunk"] + attribute_header["Metadata"]["DataRunsOffset"]
     dataruns = get_dataruns(mft_chunk, dataruns_offset_in_chunk)
+
+    if not dataruns:
+        raise EmptyNonResidentAttributeError
+
     return NonResidentStream(vbr["BytsPerClus"], vbr["OffsetInImage"], raw_image, dataruns)
 
 
