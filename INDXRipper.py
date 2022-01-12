@@ -3,7 +3,7 @@
     Author: Harel Segev
     05/16/2021
 """
-__version__ = "5.0.0"
+__version__ = "5.0.1"
 
 import argparse
 from sys import stderr
