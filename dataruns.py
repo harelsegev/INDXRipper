@@ -89,14 +89,16 @@ class NonResidentStream(BytesIO):
 
     def read_helper(self, size):
         res = bytearray()
+
         while True:
             bytes_to_read = self.bytes_to_read(size)
             res += self.read_bytes(bytes_to_read)
             self.increment_offsets(bytes_to_read)
             size -= bytes_to_read
 
-            if size <= 0 or not self.jump_to_next_datarun():
+            if size == 0 or not self.jump_to_next_datarun():
                 break
+
         return res
 
     def my_size(self):
@@ -110,32 +112,3 @@ class NonResidentStream(BytesIO):
 
     def tell(self):
         return self.virtual_offset
-
-    def reset_offsets(self):
-        self.dataruns_index = 0
-        self.physical_offset = self.current_datarun_offset()
-        self.offset_in_datarun = 0
-        self.virtual_offset = 0
-
-    def seek(self, offset, whence=0):
-        if whence == 0:
-            self.seek_helper(offset)
-
-        elif whence == 1:
-            self.seek_helper(self.tell() + offset)
-
-        elif whence == 2:
-            self.seek_helper(self.my_size() + offset)
-
-        return self.virtual_offset
-
-    def seek_helper(self, offset):
-        self.reset_offsets()
-
-        while True:
-            bytes_to_read = self.bytes_to_read(offset)
-            self.increment_offsets(bytes_to_read)
-            offset -= bytes_to_read
-
-            if offset <= 0 or not self.jump_to_next_datarun():
-                break

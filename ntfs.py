@@ -279,6 +279,5 @@ def get_mft_data_attribute(vbr, raw_image):
 
 
 def get_mft_chunks(vbr, mft_data_attribute_stream):
-    mft_data_attribute_stream.seek(0)
     while current_chunk := mft_data_attribute_stream.read(vbr["BytsPerMftChunk"]):
         yield current_chunk
