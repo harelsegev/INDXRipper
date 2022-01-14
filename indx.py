@@ -21,13 +21,19 @@ INDEX_RECORD_HEADER = Struct(
     "UpdateSequenceOffset" / Int16ul,
     "UpdateSequenceSize" / Int16ul,
 
-    Padding(20),
+    Padding(16),
+    "FirstEntryOffset" / Int32ul,
     "EndOfEntriesOffset" / Int32ul,
 
     Seek(lambda this: this.UpdateSequenceOffset),
     "UpdateSequence" / Int16ul,
     "UpdateSequenceArray" / Array(lambda this: this.UpdateSequenceSize - 1, Int16ul)
 )
+
+
+def validate_size(real_size, alloc_size, cluster_size):
+    allocation_unit = cluster_size if alloc_size >= cluster_size else 8
+    return alloc_size % allocation_unit == 0 and alloc_size - real_size < allocation_unit
 
 
 INDEX_ENTRY = Struct(
@@ -42,6 +48,8 @@ INDEX_ENTRY = Struct(
 
     "AllocatedSize" / Int64ul,
     "RealSize" / Int64ul,
+    Check(lambda this: validate_size(this.RealSize, this.AllocatedSize, this._.cluster_size)),
+
     "Flags" / FlagsEnum(Int32ul,
                         READ_ONLY=0x0001,
                         HIDDEN=0x0002,
@@ -103,55 +111,59 @@ def get_index_records(index_allocation_attribute, vbr):
             yield index_record, record_header
 
 
-def get_parent_reference_offsets(index_record, parent_reference):
-    parent_index, parent_sequence = parent_reference
+TIMESTAMPS_OFFSET_IN_ENTRY = 24
 
-    magic = FILE_REFERENCE.build({
-        "FileRecordNumber": parent_index,
-        "SequenceNumber": parent_sequence
-    })
+# TODO: Change me in 2026
+CARVER_QUERY = re.compile(
+    # 4 Timestamps: Sat 11 January 1997 20:42:45 UTC - Fri 19 June 2026 15:26:29 UTC
+    b"(.{6}[\xBC-\xDC]\x01){4}"
+    b".{25}"
+    
+    # Namespace: 0 - 3
+    b"[\x00-\x03]"
+)
 
-    return [match.start() for match in re.finditer(re.escape(magic), index_record)]
 
-
-FILENAME_ATTRIBUTE_OFFSET_IN_ENTRY = 16
-
-
-def get_entries_in_record(index_record, parent_reference):
-    index_record_stream = BytesIO(index_record)
-
-    for offset in get_parent_reference_offsets(index_record, parent_reference):
-        entry_offset = offset - FILENAME_ATTRIBUTE_OFFSET_IN_ENTRY
+def get_entry_offsets(index_record):
+    for match in re.finditer(CARVER_QUERY, index_record):
+        entry_offset = match.start() - TIMESTAMPS_OFFSET_IN_ENTRY
 
         if entry_offset >= 0:
-            index_record_stream.seek(entry_offset)
+            yield entry_offset
 
-            with suppress(StreamError, CheckError, OverflowError, UnicodeDecodeError):
-                yield INDEX_ENTRY.parse_stream(index_record_stream), entry_offset
+
+def get_entries_in_record(index_record, vbr):
+    index_record_stream = BytesIO(index_record)
+
+    for entry_offset in get_entry_offsets(index_record):
+        index_record_stream.seek(entry_offset)
+
+        with suppress(StreamError, CheckError, OverflowError, UnicodeDecodeError):
+            yield INDEX_ENTRY.parse_stream(index_record_stream, cluster_size=vbr["BytsPerClus"]), entry_offset
 
 
 def get_entry_size(index_entry):
     return index_entry["IndexEntrySize"]
 
 
-def get_all_entries_in_attribute(index_allocation_attribute, parent_reference, vbr):
+def get_all_entries_in_attribute(index_allocation_attribute, vbr):
     for index_record, record_header in get_index_records(index_allocation_attribute, vbr):
         slack_offset = get_slack_offset(record_header)
 
-        for entry, entry_offset in get_entries_in_record(index_record, parent_reference):
+        for entry, entry_offset in get_entries_in_record(index_record, vbr):
             entry["IsSlack"] = entry_offset + get_entry_size(entry) >= slack_offset
             yield entry
 
 
-def get_all_entries(index_allocation_attributes, parent_reference, vbr):
+def get_all_entries(index_allocation_attributes, vbr):
     for index_allocation_attribute in index_allocation_attributes:
-        yield from get_all_entries_in_attribute(index_allocation_attribute, parent_reference, vbr)
+        yield from get_all_entries_in_attribute(index_allocation_attribute, vbr)
 
 
-def get_slack_entries_helper(index_allocation_attributes, parent_reference, vbr):
+def get_slack_entries_helper(index_allocation_attributes, vbr):
     allocated_entries, slack_entries = {}, []
 
-    for entry in get_all_entries(index_allocation_attributes, parent_reference, vbr):
+    for entry in get_all_entries(index_allocation_attributes, vbr):
         if entry["IsSlack"]:
             slack_entries.append(entry)
         else:
@@ -165,8 +177,8 @@ def get_file_reference(entry):
     return entry["FILE_REFERENCE"]["FileRecordNumber"], entry["FILE_REFERENCE"]["SequenceNumber"]
 
 
-def get_slack_entries(index_allocation_attributes, parent_reference, vbr):
-    allocated_entries, slack_entries = get_slack_entries_helper(index_allocation_attributes, parent_reference, vbr)
+def get_slack_entries(index_allocation_attributes, vbr):
+    allocated_entries, slack_entries = get_slack_entries_helper(index_allocation_attributes, vbr)
 
     for entry in slack_entries:
         filename = entry["FilenameInUnicode"]
@@ -179,8 +191,8 @@ def get_slack_entries(index_allocation_attributes, parent_reference, vbr):
             yield entry
 
 
-def get_entries(index_allocation_attributes, parent_reference, slack_only, vbr):
+def get_entries(index_allocation_attributes, slack_only, vbr):
     if slack_only:
-        return get_slack_entries(index_allocation_attributes, parent_reference, vbr)
+        return get_slack_entries(index_allocation_attributes, vbr)
     else:
-        return get_all_entries(index_allocation_attributes, parent_reference, vbr)
+        return get_all_entries(index_allocation_attributes, vbr)

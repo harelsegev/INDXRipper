@@ -182,8 +182,8 @@ def get_output_lines(mft_dict, vbr, root_name, slack_only, dedup, output_format)
 
     for key in mft_dict:
         if index_allocation_attributes := mft_dict[key]["$INDEX_ALLOCATION"]:
-            index_entries = get_entries(index_allocation_attributes, key, slack_only, vbr)
             parent_path = get_path(mft_dict, key, root_name)
+            index_entries = get_entries(index_allocation_attributes, slack_only, vbr)
             yield get_record_output(index_entries, parent_path, dedup, output_format)
 
 
