@@ -5,9 +5,10 @@
 """
 
 from construct import Struct, Const, Padding, Array, Seek, Optional, StopIf, FlagsEnum, Enum
-from construct import PaddedString, Int8ul, Int16ul, Int32ul, Int64ul
+from construct import PaddedString, Adapter, Int8ul, Int16ul, Int32ul, Int64ul
 from construct import Check, CheckError, StreamError
 
+from datetime import datetime, timedelta
 from contextlib import suppress
 from io import BytesIO
 import re
@@ -36,15 +37,23 @@ def validate_size(real_size, alloc_size, cluster_size):
     return alloc_size % allocation_unit == 0 and alloc_size - real_size < allocation_unit
 
 
+class FiletimeAdapter(Adapter):
+    def _decode(self, obj, context, path):
+        return datetime(1601, 1, 1) + timedelta(microseconds=(obj / 10))
+
+
+Filetime = FiletimeAdapter(Int64ul)
+
+
 INDEX_ENTRY = Struct(
     "FILE_REFERENCE" / FILE_REFERENCE,
     "IndexEntrySize" / Int16ul,
     Padding(14),
 
-    "CreationTime" / Int64ul,
-    "LastModificationTime" / Int64ul,
-    "LastMftChangeTime" / Int64ul,
-    "LastAccessTime" / Int64ul,
+    "CreationTime" / Filetime,
+    "LastModificationTime" / Filetime,
+    "LastMftChangeTime" / Filetime,
+    "LastAccessTime" / Filetime,
 
     "AllocatedSize" / Int64ul,
     "RealSize" / Int64ul,
@@ -117,7 +126,7 @@ TIMESTAMPS_OFFSET_IN_ENTRY = 24
 CARVER_QUERY = re.compile(
     # 4 Timestamps: Sat 11 January 1997 20:42:45 UTC - Fri 19 June 2026 15:26:29 UTC
     b"(.{6}[\xBC-\xDC]\x01){4}"
-    b".{25}"
+    b"[\x00-\xFF]{25}"
     
     # Namespace: 0 - 3
     b"[\x00-\x03]"

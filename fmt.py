@@ -4,19 +4,15 @@
     31/12/2021
 """
 
-from datetime import timezone, datetime, timedelta
+from datetime import timezone, datetime
 
 
-def to_datetime(timestamp: int):
-    return datetime(1601, 1, 1) + timedelta(microseconds=(timestamp / 10))
+def to_epoch(timestamp: datetime):
+    return timestamp.replace(tzinfo=timezone.utc).timestamp()
 
 
-def to_epoch(timestamp: int):
-    return to_datetime(timestamp).replace(tzinfo=timezone.utc).timestamp()
-
-
-def to_iso(timestamp: int):
-    return to_datetime(timestamp).replace(tzinfo=timezone.utc).isoformat()
+def to_iso(timestamp: datetime):
+    return timestamp.replace(tzinfo=timezone.utc).isoformat()
 
 
 COMMON_FIELDS = {
