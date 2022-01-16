@@ -5,7 +5,7 @@
 """
 
 from construct import Struct, Const, Padding, Array, Seek, Optional, StopIf, FlagsEnum, Enum
-from construct import PaddedString, Adapter, Int8ul, Int16ul, Int32ul, Int64ul
+from construct import PaddedString, Adapter, Computed, Int8ul, Int16ul, Int32ul, Int64ul
 from construct import Check, CheckError, StreamError
 
 from datetime import datetime, timedelta
@@ -32,11 +32,6 @@ INDEX_RECORD_HEADER = Struct(
 )
 
 
-def validate_size(real_size, alloc_size, cluster_size):
-    allocation_unit = cluster_size if alloc_size >= cluster_size else 8
-    return alloc_size % allocation_unit == 0 and alloc_size - real_size < allocation_unit
-
-
 class FiletimeAdapter(Adapter):
     def _decode(self, obj, context, path):
         return datetime(1601, 1, 1) + timedelta(microseconds=(obj / 10))
@@ -47,9 +42,13 @@ Filetime = FiletimeAdapter(Int64ul)
 
 INDEX_ENTRY = Struct(
     "FILE_REFERENCE" / FILE_REFERENCE,
-    "IndexEntrySize" / Int16ul,
-    Padding(14),
+    "EntrySize" / Int16ul,
+    Padding(2),
 
+    "EntryFlags" / FlagsEnum(Int8ul, POINTS_TO_A_SUBNODE=0x01, LAST_ENTRY=0x2),
+    StopIf(lambda this: this.EntryFlags["LAST_ENTRY"] and not this._.is_slack),
+
+    Padding(11),
     "CreationTime" / Filetime,
     "LastModificationTime" / Filetime,
     "LastMftChangeTime" / Filetime,
@@ -57,7 +56,6 @@ INDEX_ENTRY = Struct(
 
     "AllocatedSize" / Int64ul,
     "RealSize" / Int64ul,
-    Check(lambda this: validate_size(this.RealSize, this.AllocatedSize, this._.cluster_size)),
 
     "Flags" / FlagsEnum(Int32ul,
                         READ_ONLY=0x0001,
@@ -81,7 +79,9 @@ INDEX_ENTRY = Struct(
     Check(lambda this: this.FilenameLengthInCharacters != 0),
 
     "FilenameNamespace" / Enum(Int8ul, POSIX=0, WIN32=1, DOS=2, WIN32_DOS=3),
-    "FilenameInUnicode" / PaddedString(lambda this: this.FilenameLengthInCharacters * 2, "utf16")
+    "FilenameInUnicode" / PaddedString(lambda this: this.FilenameLengthInCharacters * 2, "utf16"),
+
+    "IsSlack" / Computed(lambda this: this._.is_slack)
 )
 
 
@@ -105,6 +105,10 @@ def get_slack_offset(record_header):
     return record_header["EndOfEntriesOffset"] + NODE_HEADER_OFFSET_IN_RECORD
 
 
+def get_first_entry_offset(record_header):
+    return record_header["FirstEntryOffset"] + NODE_HEADER_OFFSET_IN_RECORD
+
+
 def apply_fixup(index_record, record_header, vbr):
     for i, usn_offset in enumerate(range(vbr["BytsPerSec"] - 2, vbr["BytsPerIndx"], vbr["BytsPerSec"])):
         index_record[usn_offset:usn_offset + 2] = Int16ul.build(record_header["UpdateSequenceArray"][i])
@@ -120,12 +124,26 @@ def get_index_records(index_allocation_attribute, vbr):
             yield index_record, record_header
 
 
+def get_allocated_entries_in_record(index_record, record_header):
+    index_record_stream = BytesIO(index_record)
+    current_offset = get_first_entry_offset(record_header)
+
+    while True:
+        index_record_stream.seek(current_offset)
+        current_entry = INDEX_ENTRY.parse_stream(index_record_stream, is_slack=False)
+        if current_entry["EntryFlags"]["LAST_ENTRY"]:
+            break
+
+        yield current_entry
+        current_offset += current_entry["EntrySize"]
+
+
 TIMESTAMPS_OFFSET_IN_ENTRY = 24
 
 # TODO: Change me in 2026
 CARVER_QUERY = re.compile(
     # 4 Timestamps: Sat 11 January 1997 20:42:45 UTC - Fri 19 June 2026 15:26:29 UTC
-    b"(.{6}[\xBC-\xDC]\x01){4}"
+    b"([\x00-\xFF]{6}[\xBC-\xDC]\x01){4}"
     b"[\x00-\xFF]{25}"
     
     # Namespace: 0 - 3
@@ -133,35 +151,30 @@ CARVER_QUERY = re.compile(
 )
 
 
-def get_entry_offsets(index_record):
-    for match in re.finditer(CARVER_QUERY, index_record):
+def get_slack_entry_offsets(index_slack):
+    for match in re.finditer(CARVER_QUERY, index_slack):
         entry_offset = match.start() - TIMESTAMPS_OFFSET_IN_ENTRY
 
         if entry_offset >= 0:
             yield entry_offset
 
 
-def get_entries_in_record(index_record, vbr):
-    index_record_stream = BytesIO(index_record)
+def get_slack_entries_in_record(index_slack):
+    index_slack_stream = BytesIO(index_slack)
 
-    for entry_offset in get_entry_offsets(index_record):
-        index_record_stream.seek(entry_offset)
+    for entry_offset in get_slack_entry_offsets(index_slack):
+        index_slack_stream.seek(entry_offset)
 
         with suppress(StreamError, CheckError, OverflowError, UnicodeDecodeError):
-            yield INDEX_ENTRY.parse_stream(index_record_stream, cluster_size=vbr["BytsPerClus"]), entry_offset
-
-
-def get_entry_size(index_entry):
-    return index_entry["IndexEntrySize"]
+            yield INDEX_ENTRY.parse_stream(index_slack_stream, is_slack=True)
 
 
 def get_all_entries_in_attribute(index_allocation_attribute, vbr):
     for index_record, record_header in get_index_records(index_allocation_attribute, vbr):
-        slack_offset = get_slack_offset(record_header)
+        yield from get_allocated_entries_in_record(index_record, record_header)
 
-        for entry, entry_offset in get_entries_in_record(index_record, vbr):
-            entry["IsSlack"] = entry_offset + get_entry_size(entry) >= slack_offset
-            yield entry
+        slack_space = b'\x00' * TIMESTAMPS_OFFSET_IN_ENTRY + index_record[get_slack_offset(record_header):]
+        yield from get_slack_entries_in_record(slack_space)
 
 
 def get_all_entries(index_allocation_attributes, vbr):
