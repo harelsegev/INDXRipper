@@ -6,7 +6,7 @@
 
 from construct import Struct, Const, Padding, Array, Seek, Optional, StopIf, FlagsEnum, Enum
 from construct import PaddedString, Adapter, Computed, Int8ul, Int16ul, Int32ul, Int64ul
-from construct import Check, CheckError, StreamError
+from construct import StreamError
 
 from datetime import datetime, timedelta
 from contextlib import suppress
@@ -164,7 +164,7 @@ def get_slack_entries_in_record(index_slack):
     for entry_offset in get_slack_entry_offsets(index_slack):
         index_slack_stream.seek(entry_offset)
 
-        with suppress(StreamError, CheckError, OverflowError, UnicodeDecodeError):
+        with suppress(StreamError, OverflowError, UnicodeDecodeError):
             entry = INDEX_ENTRY.parse_stream(index_slack_stream, is_slack=True)
 
             if not entry["EntryFlags"]["LAST_ENTRY"]:
@@ -176,7 +176,7 @@ def get_all_entries_in_attribute(index_allocation_attribute, vbr):
         yield from get_allocated_entries_in_record(index_record, record_header)
 
         del index_record[:get_slack_offset(record_header)]
-        index_record[:0] = b'\x00' * TIMESTAMPS_OFFSET_IN_ENTRY
+        index_record[:0] = b"\x00" * TIMESTAMPS_OFFSET_IN_ENTRY
         yield from get_slack_entries_in_record(index_record)
 
 
