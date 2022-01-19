@@ -46,7 +46,7 @@ INDEX_ENTRY = Struct(
     Padding(2),
 
     "EntryFlags" / FlagsEnum(Int8ul, POINTS_TO_A_SUBNODE=0x01, LAST_ENTRY=0x2),
-    StopIf(lambda this: this.EntryFlags["LAST_ENTRY"]),
+    StopIf(lambda this: this.EntryFlags["LAST_ENTRY"] and not this._.is_slack),
 
     Padding(11),
     "CreationTime" / Filetime,
@@ -165,19 +165,19 @@ def get_slack_entries_in_record(index_slack):
         index_slack_stream.seek(entry_offset)
 
         with suppress(StreamError, OverflowError, UnicodeDecodeError):
-            entry = INDEX_ENTRY.parse_stream(index_slack_stream, is_slack=True)
+            yield INDEX_ENTRY.parse_stream(index_slack_stream, is_slack=True)
 
-            if not entry["EntryFlags"]["LAST_ENTRY"]:
-                yield entry
+
+def get_all_entries_in_record(index_record, record_header):
+    yield from get_allocated_entries_in_record(index_record, record_header)
+    del index_record[:get_slack_offset(record_header)]
+    index_record[:0] = b"\x00" * TIMESTAMPS_OFFSET_IN_ENTRY
+    yield from get_slack_entries_in_record(index_record)
 
 
 def get_all_entries_in_attribute(index_allocation_attribute, vbr):
     for index_record, record_header in get_index_records(index_allocation_attribute, vbr):
-        yield from get_allocated_entries_in_record(index_record, record_header)
-
-        del index_record[:get_slack_offset(record_header)]
-        index_record[:0] = b"\x00" * TIMESTAMPS_OFFSET_IN_ENTRY
-        yield from get_slack_entries_in_record(index_record)
+        yield from get_all_entries_in_record(index_record, record_header)
 
 
 def get_all_entries(index_allocation_attributes, vbr):
