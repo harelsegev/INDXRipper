@@ -54,8 +54,6 @@ mactime -z UTC -b temp.bodyfile > image.timeline
 
 https://www.youtube.com/watch?v=0HT1uiP-BRg
 
-
-
 #### The bodyfile output
 
 Note that the bodyfile format is specific to the sleuthkit and is not fully documented. INDXRipper's bodyfile output is not fully compatible with it.
@@ -71,17 +69,11 @@ Note that the bodyfile format is specific to the sleuthkit and is not fully docu
 * Works on live Windows NTFS drives, using device paths
 * All times outputted are in UTC
 
-### Carving method
-
-INDXRipper scans the MFT for records of directories that have an $INDEX_ALLOCATION attribute. If it finds such a record, it searches the attribute for the directory's file reference. The index entries in the attribute should contain this file reference.
-
 ### The --slack-only switch
 
 For every entry in slack space, INDXRipper scans the directory for an allocated entry with the same file name. If such entry is found, INDXRipper compares the file references in the two entries. If they match, the slack entry is not outputted.
 
 In any other case, the slack entry is outputted.
-
-* The **--slack-only** switch filters out metadata of active files. Old metadata of active files can sometimes be of interest, for example - a previous last modification time of an LNK file. Keep this in mind.
 
 ## Limitations
 * The tool may give false results.
