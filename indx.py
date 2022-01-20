@@ -155,7 +155,10 @@ CARVER_QUERY = re.compile(
 
 def get_slack_entry_offsets(index_slack):
     for match in re.finditer(CARVER_QUERY, index_slack):
-        yield match.start() - TIMESTAMPS_OFFSET_IN_ENTRY
+        entry_offset = match.start() - TIMESTAMPS_OFFSET_IN_ENTRY
+
+        if entry_offset >= 0:
+            yield entry_offset
 
 
 def get_slack_entries_in_record(index_slack):
