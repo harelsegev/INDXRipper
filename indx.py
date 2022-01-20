@@ -143,7 +143,19 @@ TIMESTAMPS_OFFSET_IN_ENTRY = 24
 CARVER_QUERY = re.compile(
     # 4 Timestamps: Sat 11 January 1997 20:42:45 UTC - Fri 19 June 2026 15:26:29 UTC
     b"([\x00-\xFF]{6}[\xBC-\xDC]\x01){4}"
-    b"[\x00-\xFF]{24}"
+    
+    # Allocated size: divisible by 8
+    b"[\x00\x08\x10\x18\x20\x28\x30\x38\x40\x48\x50\x58\x60\x68\x70\x78"
+    b"\x80\x88\x90\x98\xA0\xA8\xB0\xB8\xC0\xC8\xD0\xD8\xE0\xE8\xF0\xF8]"
+    
+    # Padding
+    b"[\x00-\xFF]{15}"
+    
+    # Flags: max == 0x3001FFFF
+    b"[\x00-\xFF]{2}[\x00\x01][\x00\x10\x20\x30]"
+    
+    # Padding
+    b"[\x00-\xFF]{4}"
     
     # Name length: != 0
     b"[^\x00]"
