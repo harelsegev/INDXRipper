@@ -152,13 +152,7 @@ CARVER_QUERY = re.compile(
     b"\x80\x88\x90\x98\xA0\xA8\xB0\xB8\xC0\xC8\xD0\xD8\xE0\xE8\xF0\xF8]"
     
     # Padding
-    b"[\x00-\xFF]{15}"
-    
-    # Flags: all on == 0x3001FFFF
-    b"[\x00-\xFF]{2}[\x00\x01][\x00\x10\x20\x30]"
-    
-    # Padding
-    b"[\x00-\xFF]{4}"
+    b"[\x00-\xFF]{23}"
     
     # Name length: != 0
     b"[^\x00]"
