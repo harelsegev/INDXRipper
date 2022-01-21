@@ -4,8 +4,8 @@
     5/12/2021
 """
 
-from construct import Struct, Const, Padding, Array, Seek, Optional, StopIf, FlagsEnum, Enum
-from construct import PaddedString, Adapter, Computed, Int8ul, Int16ul, Int32ul, Int64ul
+from construct import Struct, Const, Padding, Array, Seek, Optional, StopIf, FlagsEnum, Enum, Check
+from construct import PaddedString, Adapter, CheckError, Computed, Int8ul, Int16ul, Int32ul, Int64ul
 from construct import StreamError
 
 from datetime import datetime, timedelta
@@ -79,6 +79,7 @@ INDEX_ENTRY = Struct(
 
     "FilenameNamespace" / Enum(Int8ul, POSIX=0, WIN32=1, DOS=2, WIN32_DOS=3),
     "FilenameInUnicode" / PaddedString(lambda this: this.FilenameLengthInCharacters * 2, "utf16"),
+    Check(lambda this: not this._.is_slack or this.FilenameInUnicode.isprintable()),
 
     "IsSlack" / Computed(lambda this: this._.is_slack)
 )
@@ -141,6 +142,8 @@ TIMESTAMPS_OFFSET_IN_ENTRY = 24
 
 # TODO: Change me in 2026
 CARVER_QUERY = re.compile(
+    b"(?=("
+    
     # 4 Timestamps: Sat 11 January 1997 20:42:45 UTC - Fri 19 June 2026 15:26:29 UTC
     b"([\x00-\xFF]{6}[\xBC-\xDC]\x01){4}"
     
@@ -151,7 +154,7 @@ CARVER_QUERY = re.compile(
     # Padding
     b"[\x00-\xFF]{15}"
     
-    # Flags: max == 0x3001FFFF
+    # Flags: all on == 0x3001FFFF
     b"[\x00-\xFF]{2}[\x00\x01][\x00\x10\x20\x30]"
     
     # Padding
@@ -162,6 +165,8 @@ CARVER_QUERY = re.compile(
     
     # Namespace: 0 - 3
     b"[\x00-\x03]"
+    
+    b"))"
 )
 
 
@@ -179,7 +184,7 @@ def get_slack_entries_in_record(index_slack):
     for entry_offset in get_slack_entry_offsets(index_slack):
         index_slack_stream.seek(entry_offset)
 
-        with suppress(StreamError, OverflowError, UnicodeDecodeError):
+        with suppress(StreamError, CheckError, OverflowError, UnicodeDecodeError):
             yield INDEX_ENTRY.parse_stream(index_slack_stream, is_slack=True)
 
 
