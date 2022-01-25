@@ -65,7 +65,6 @@ Note that the bodyfile format is specific to the sleuthkit and is not fully docu
 * Handles $INDEX_ALLOCATION and $FILE_NAME attributes in extension records
 * Full paths are reconstructed using the parent directory references from the MFT records.
 * Orphan directories are listed under "/$Orphan"
-* Directories with no $FILE_NAME attributes in their MFT records are listed under "/$NoName"
 * Works on live Windows NTFS drives, using device paths
 * All times outputted are in UTC
 
