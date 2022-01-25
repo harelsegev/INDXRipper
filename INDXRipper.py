@@ -6,7 +6,6 @@
 __version__ = "5.1.2"
 
 import argparse
-from sys import stderr
 from contextlib import suppress
 
 from ntfs import parse_filename_attribute, get_resident_attribute, get_attribute_name, get_attribute_type
@@ -16,7 +15,7 @@ from ntfs import get_mft_chunks, get_record_headers, apply_fixup, get_sequence_n
 from ntfs import get_boot_sector, get_mft_data_attribute, get_base_record_reference, is_base_record
 
 from indx import get_entries
-from fmt import get_entry_output, get_format_header
+from fmt import get_entry_output, get_format_header, warning
 
 
 class NoFilenameAttributeInRecordError(ValueError):
@@ -40,14 +39,6 @@ def get_arguments():
     parser.add_argument("--slack-only", action="store_true", help="only display entries in slack space")
     parser.add_argument("--dedup", action="store_true", help="deduplicate output lines")
     return parser.parse_args()
-
-
-def eprint(*args, **kwargs):
-    print(*args, file=stderr, **kwargs)
-
-
-def warning(message):
-    eprint(f"INDXRipper: warning: {message}")
 
 
 def get_parent_reference(filename_attribute):
@@ -90,7 +81,7 @@ def get_mft_records(mft_data, vbr):
             current_record += 1
             if is_valid_record_signature(record_header):
                 if not is_valid_fixup(record_header):
-                    warning(f"fixup verification failed for file record at index {current_record}")
+                    warning(f"fixup validation failed for file record at index {current_record}. ignoring this record")
                     continue
 
                 yield current_record, get_sequence_number(record_header), mft_chunk, record_header
@@ -151,7 +142,7 @@ def get_path_helper(mft_dict, key):
             path_cache[key] = get_path_helper(mft_dict, parent_reference) + "/" + filename["FilenameInUnicode"]
 
         except NoFilenameAttributeInRecordError:
-            path_cache[key] = "/$NoName/[FileNumber: {}, SequenceNumber: {}]".format(*key)
+            path_cache[key] = "/$Orphan"
 
     return path_cache[key]
 
@@ -183,7 +174,7 @@ def get_output_lines(mft_dict, vbr, root_name, slack_only, dedup, output_format)
     for key in mft_dict:
         if index_allocation_attributes := mft_dict[key]["$INDEX_ALLOCATION"]:
             parent_path = get_path(mft_dict, key, root_name)
-            index_entries = get_entries(index_allocation_attributes, slack_only, vbr)
+            index_entries = get_entries(index_allocation_attributes, key, slack_only, vbr)
             yield get_record_output(index_entries, parent_path, dedup, output_format)
 
 

@@ -14,6 +14,7 @@ from io import BytesIO
 import re
 
 from ntfs import FILE_REFERENCE
+from fmt import warning
 
 INDEX_RECORD_HEADER = Struct(
     "Magic" / Optional(Const(b'INDX')),
@@ -48,7 +49,8 @@ INDEX_ENTRY = Struct(
     "EntryFlags" / FlagsEnum(Int8ul, POINTS_TO_A_SUBNODE=0x01, LAST_ENTRY=0x2),
     StopIf(lambda this: this.EntryFlags["LAST_ENTRY"] and not this._.is_slack),
 
-    Padding(11),
+    Padding(3),
+    "PARENT_REFERENCE" / FILE_REFERENCE,
     "CreationTime" / Filetime,
     "LastModificationTime" / Filetime,
     "LastMftChangeTime" / Filetime,
@@ -111,7 +113,12 @@ def get_first_entry_offset(record_header):
 
 def apply_fixup(index_record, record_header, vbr):
     for i, usn_offset in enumerate(range(vbr["BytsPerSec"] - 2, vbr["BytsPerIndx"], vbr["BytsPerSec"])):
+        if Int16ul.parse(index_record[usn_offset:usn_offset + 2]) != record_header["UpdateSequence"]:
+            return False
+
         index_record[usn_offset:usn_offset + 2] = Int16ul.build(record_header["UpdateSequenceArray"][i])
+
+    return True
 
 
 def get_index_records(index_allocation_attribute, vbr):
@@ -119,9 +126,12 @@ def get_index_records(index_allocation_attribute, vbr):
         record_header = get_index_record_header(index_record)
 
         if is_valid_index_record(record_header):
-            apply_fixup(index_record, record_header, vbr)
-
+            record_header["IsValidFixup"] = apply_fixup(index_record, record_header, vbr)
             yield index_record, record_header
+
+
+def is_valid_fixup(record_header):
+    return record_header["IsValidFixup"]
 
 
 def get_allocated_entries_in_record(index_record, record_header):
@@ -182,27 +192,48 @@ def get_slack_entries_in_record(index_slack):
             yield INDEX_ENTRY.parse_stream(index_slack_stream, is_slack=True)
 
 
-def get_all_entries_in_record(index_record, record_header):
-    yield from get_allocated_entries_in_record(index_record, record_header)
+def get_parent_reference_as_key(index_entry):
+    return index_entry["PARENT_REFERENCE"]["FileRecordNumber"], index_entry["PARENT_REFERENCE"]["SequenceNumber"]
+
+
+def get_all_entries_in_record(index_record, record_header, parent_reference):
+    allocated_entries = get_allocated_entries_in_record(index_record, record_header)
+
+    with suppress(StopIteration):
+        first_entry = next(allocated_entries)
+
+        if get_parent_reference_as_key(first_entry) != parent_reference:
+            # this INDX entry doesn't belong to the directory. ignoring this record
+            return
+
+        yield first_entry
+
+    for entry in allocated_entries:
+        yield entry
+
     del index_record[:get_slack_offset(record_header)]
     index_record[:0] = b"\x00" * TIMESTAMPS_OFFSET_IN_ENTRY
     yield from get_slack_entries_in_record(index_record)
 
 
-def get_all_entries_in_attribute(index_allocation_attribute, vbr):
+def get_all_entries_in_attribute(index_allocation_attribute, parent_reference, vbr):
     for index_record, record_header in get_index_records(index_allocation_attribute, vbr):
-        yield from get_all_entries_in_record(index_record, record_header)
+        if is_valid_fixup(record_header):
+            yield from get_all_entries_in_record(index_record, record_header, parent_reference)
+        else:
+            warning("fixup validation failed for an INDX record. the entire record will be treated as slack space")
+            yield from get_slack_entries_in_record(index_record)
 
 
-def get_all_entries(index_allocation_attributes, vbr):
+def get_all_entries(index_allocation_attributes, parent_reference, vbr):
     for index_allocation_attribute in index_allocation_attributes:
-        yield from get_all_entries_in_attribute(index_allocation_attribute, vbr)
+        yield from get_all_entries_in_attribute(index_allocation_attribute, parent_reference, vbr)
 
 
-def get_slack_entries_helper(index_allocation_attributes, vbr):
+def get_slack_entries_helper(index_allocation_attributes, parent_reference, vbr):
     allocated_entries, slack_entries = {}, []
 
-    for entry in get_all_entries(index_allocation_attributes, vbr):
+    for entry in get_all_entries(index_allocation_attributes, parent_reference, vbr):
         if entry["IsSlack"]:
             slack_entries.append(entry)
         else:
@@ -216,8 +247,8 @@ def get_file_reference(entry):
     return entry["FILE_REFERENCE"]["FileRecordNumber"], entry["FILE_REFERENCE"]["SequenceNumber"]
 
 
-def get_slack_entries(index_allocation_attributes, vbr):
-    allocated_entries, slack_entries = get_slack_entries_helper(index_allocation_attributes, vbr)
+def get_slack_entries(index_allocation_attributes, parent_reference, vbr):
+    allocated_entries, slack_entries = get_slack_entries_helper(index_allocation_attributes, parent_reference, vbr)
 
     for entry in slack_entries:
         filename = entry["FilenameInUnicode"]
@@ -230,8 +261,8 @@ def get_slack_entries(index_allocation_attributes, vbr):
             yield entry
 
 
-def get_entries(index_allocation_attributes, slack_only, vbr):
+def get_entries(index_allocation_attributes, parent_reference, slack_only, vbr):
     if slack_only:
-        return get_slack_entries(index_allocation_attributes, vbr)
+        return get_slack_entries(index_allocation_attributes, parent_reference, vbr)
     else:
-        return get_all_entries(index_allocation_attributes, vbr)
+        return get_all_entries(index_allocation_attributes, parent_reference, vbr)

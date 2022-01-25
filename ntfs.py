@@ -153,9 +153,6 @@ def get_first_mft_chunk(vbr, raw_image):
     return bytearray(raw_image.read(vbr["BytsPerMftChunk"]))
 
 
-NUM_OF_FIXUP_BYTES = 2
-
-
 def get_record_headers(mft_chunk, vbr):
     return FILE_RECORD_HEADERS.parse(
         mft_chunk,
@@ -170,14 +167,14 @@ def is_valid_record_signature(record_header):
 
 def apply_record_fixup(mft_chunk, record_header, vbr):
     usn = record_header["UpdateSequenceNumber"]
-    first_fixup_offset = record_header["OffsetInChunk"] + vbr["BytsPerSec"] - NUM_OF_FIXUP_BYTES
+    first_fixup_offset = record_header["OffsetInChunk"] + vbr["BytsPerSec"] - 2
     end_of_record_offset = record_header["OffsetInChunk"] + vbr["BytsPerRec"]
 
     for i, usn_offset in enumerate(range(first_fixup_offset, end_of_record_offset, vbr["BytsPerSec"])):
-        if Int16ul.parse(mft_chunk[usn_offset:usn_offset + NUM_OF_FIXUP_BYTES]) != usn:
+        if Int16ul.parse(mft_chunk[usn_offset:usn_offset + 2]) != usn:
             return False
 
-        mft_chunk[usn_offset:usn_offset + NUM_OF_FIXUP_BYTES] = Int16ul.build(record_header["UpdateSequenceArray"][i])
+        mft_chunk[usn_offset:usn_offset + 2] = Int16ul.build(record_header["UpdateSequenceArray"][i])
 
     return True
 

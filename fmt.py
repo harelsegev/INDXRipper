@@ -5,6 +5,7 @@
 """
 
 from datetime import timezone, datetime
+from sys import stderr
 
 
 def to_epoch(timestamp: datetime):
@@ -16,6 +17,8 @@ def to_iso(timestamp: datetime):
 
 
 COMMON_FIELDS = {
+    "full_path": lambda index_entry: index_entry["ParentPath"] + "/" + index_entry["FilenameInUnicode"],
+
     "index": lambda index_entry: index_entry["FILE_REFERENCE"]["FileRecordNumber"],
     "sequence": lambda index_entry: index_entry["FILE_REFERENCE"]["SequenceNumber"],
 
@@ -31,7 +34,7 @@ COMMON_FIELDS = {
 OUTPUT_FORMATS = {
     "csv":
     {
-        "fmt": "{slack},\"{full_path}\",{flags},{index},{sequence},"
+        "fmt": "{source},\"{full_path}\",{flags},{index},{sequence},"
                "{size},{alloc_size},{cr_time},{m_time},{a_time},{c_time}\n",
 
         "header": "Source,Path,Flags,FileNumber,SequenceNumber,"
@@ -44,11 +47,19 @@ OUTPUT_FORMATS = {
                 [flag for flag in index_entry["Flags"] if index_entry["Flags"][flag] and flag != "_flagsenum"]
             ),
 
-            "slack": lambda index_entry: "Index Slack" if index_entry["IsSlack"] else "Index Record"
+            "source": lambda index_entry: "Index Slack" if index_entry["IsSlack"] else "Index Record"
 
         } | COMMON_FIELDS,
 
-        "adapted_fields": {"cr_time": to_iso, "m_time": to_iso, "a_time": to_iso, "c_time": to_iso}
+        "adapted_fields":
+        {
+            "cr_time": to_iso,
+            "m_time": to_iso,
+            "a_time": to_iso,
+            "c_time": to_iso,
+
+            "full_path": lambda full_path: full_path.replace("\"", "\"\"")
+        }
     },
 
     "bodyfile":
@@ -89,13 +100,19 @@ def populate_fmt_dict(fmt_dict, index_entry, output_format):
 
 
 def get_entry_output(index_entry, parent_path, output_format):
-    fmt_dict = {
-        "full_path": parent_path + "/" + index_entry["FilenameInUnicode"]
-    }
-
+    fmt_dict = {}
+    index_entry["ParentPath"] = parent_path
     populate_fmt_dict(fmt_dict, index_entry, output_format)
     return OUTPUT_FORMATS[output_format]["fmt"].format(**fmt_dict)
 
 
 def get_format_header(output_format):
     return OUTPUT_FORMATS[output_format]["header"]
+
+
+def eprint(*args, **kwargs):
+    print(*args, file=stderr, **kwargs)
+
+
+def warning(message):
+    eprint(f"INDXRipper: warning: {message}")
