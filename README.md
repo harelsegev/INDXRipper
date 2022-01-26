@@ -75,12 +75,12 @@ For every entry in slack space, INDXRipper scans the directory for an allocated 
 
 In any other case, the slack entry is outputted.
 
-### The --no-deleted switch
+### The --skip-deleted switch
 A deleted directory may have some of its clusters overwritten by another directory. Entries that are found in such a directory may actually belong to a different one.
 
 INDXRipper does its best to filter out this kind of entries, but it may fail to identify all of them. This results in files being placed in an incorrect path.
 
-If the --no-deleted switch is given, INDXRipper will not display entries in deleted directories. This makes sure files are placed in the correct path, at the cost of information loss.
+If the --skip-deleted switch is given, INDXRipper will not display entries in deleted directories. This makes sure files are placed in a correct path, at the cost of information loss.
 
 ## Limitations
 * The tool may give false results.
