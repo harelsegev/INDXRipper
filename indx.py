@@ -196,6 +196,11 @@ def get_parent_reference_as_key(index_entry):
     return index_entry["PARENT_REFERENCE"]["FileRecordNumber"], index_entry["PARENT_REFERENCE"]["SequenceNumber"]
 
 
+def remove_allocated_space(index_record, record_header):
+    del index_record[:get_slack_offset(record_header)]
+    index_record[:0] = b"\x00" * TIMESTAMPS_OFFSET_IN_ENTRY
+
+
 def get_all_entries_in_record(index_record, record_header, parent_reference):
     allocated_entries = get_allocated_entries_in_record(index_record, record_header)
 
@@ -203,7 +208,7 @@ def get_all_entries_in_record(index_record, record_header, parent_reference):
         first_entry = next(allocated_entries)
 
         if get_parent_reference_as_key(first_entry) != parent_reference:
-            # this INDX entry doesn't belong to the directory. ignoring this record
+            # this index entry doesn't belong to the directory. ignoring the entire index record
             return
 
         yield first_entry
@@ -211,8 +216,7 @@ def get_all_entries_in_record(index_record, record_header, parent_reference):
     for entry in allocated_entries:
         yield entry
 
-    del index_record[:get_slack_offset(record_header)]
-    index_record[:0] = b"\x00" * TIMESTAMPS_OFFSET_IN_ENTRY
+    remove_allocated_space(index_record, record_header)
     yield from get_slack_entries_in_record(index_record)
 
 

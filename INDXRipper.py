@@ -9,10 +9,10 @@ import argparse
 from contextlib import suppress
 
 from ntfs import parse_filename_attribute, get_resident_attribute, get_attribute_name, get_attribute_type
-from ntfs import is_valid_fixup, is_valid_record_signature, get_attribute_headers
+from ntfs import get_boot_sector, get_mft_data_attribute, get_base_record_reference, is_base_record
+from ntfs import is_valid_fixup, is_valid_record_signature, get_attribute_headers, is_used
 from ntfs import EmptyNonResidentAttributeError, get_non_resident_attribute, is_directory
 from ntfs import get_mft_chunks, get_record_headers, apply_fixup, get_sequence_number
-from ntfs import get_boot_sector, get_mft_data_attribute, get_base_record_reference, is_base_record
 
 from indx import get_entries
 from fmt import get_entry_output, get_format_header, warning
@@ -37,6 +37,7 @@ def get_arguments():
     parser.add_argument("-w", choices=["csv", "bodyfile"], default="csv", help="output format. default is csv")
 
     parser.add_argument("--slack-only", action="store_true", help="only display entries in slack space")
+    parser.add_argument("--no-deleted", action="store_true", help="do not display entries in deleted directories")
     parser.add_argument("--dedup", action="store_true", help="deduplicate output lines")
     return parser.parse_args()
 
@@ -87,12 +88,14 @@ def get_mft_records(mft_data, vbr):
                 yield current_record, get_sequence_number(record_header), mft_chunk, record_header
 
 
-def add_to_mft_dict(mft_dict, key, values):
+def add_to_mft_dict(mft_dict, key, values, is_allocated):
     if key not in mft_dict:
         mft_dict[key] = values
+        mft_dict[key]["IS_ALLOCATED"] = is_allocated
     else:
         mft_dict[key]["$INDEX_ALLOCATION"] += values["$INDEX_ALLOCATION"]
         mft_dict[key]["$FILE_NAME"] += values["$FILE_NAME"]
+        mft_dict[key]["IS_ALLOCATED"] = mft_dict[key]["IS_ALLOCATED"] or is_allocated
 
 
 def get_mft_dict(raw_image, mft_data, vbr):
@@ -103,10 +106,11 @@ def get_mft_dict(raw_image, mft_data, vbr):
             values = get_mft_dict_values(vbr, raw_image, mft_chunk, record_header)
 
             if is_base_record(record_header):
-                add_to_mft_dict(mft_dict, (index, sequence), values)
+                is_allocated = is_used(record_header)
+                add_to_mft_dict(mft_dict, (index, sequence), values, is_allocated)
             else:
                 base_reference = get_base_record_reference(record_header)
-                add_to_mft_dict(mft_dict, base_reference, values)
+                add_to_mft_dict(mft_dict, base_reference, values, False)
 
     return mft_dict
 
@@ -168,14 +172,15 @@ def get_record_output(index_entries, parent_path, dedup, output_format):
     return lines
 
 
-def get_output_lines(mft_dict, vbr, root_name, slack_only, dedup, output_format):
+def get_output_lines(mft_dict, vbr, root_name, slack_only, no_deleted, dedup, output_format):
     yield [get_format_header(output_format)]
 
     for key in mft_dict:
-        if index_allocation_attributes := mft_dict[key]["$INDEX_ALLOCATION"]:
-            parent_path = get_path(mft_dict, key, root_name)
-            index_entries = get_entries(index_allocation_attributes, key, slack_only, vbr)
-            yield get_record_output(index_entries, parent_path, dedup, output_format)
+        if not no_deleted or mft_dict[key]["IS_ALLOCATED"]:
+            if index_allocation_attributes := mft_dict[key]["$INDEX_ALLOCATION"]:
+                parent_path = get_path(mft_dict, key, root_name)
+                index_entries = get_entries(index_allocation_attributes, key, slack_only, vbr)
+                yield get_record_output(index_entries, parent_path, dedup, output_format)
 
 
 def main():
@@ -186,7 +191,7 @@ def main():
         mft_dict = get_mft_dict(raw_image, mft_data, vbr)
 
         with open(args.outfile, "at+", encoding="utf-8") as outfile:
-            for lines in get_output_lines(mft_dict, vbr, args.m, args.slack_only, args.dedup, args.w):
+            for lines in get_output_lines(mft_dict, vbr, args.m, args.slack_only, args.no_deleted, args.dedup, args.w):
                 outfile.writelines(lines)
 
 
