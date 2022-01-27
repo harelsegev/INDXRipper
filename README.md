@@ -78,7 +78,7 @@ In any other case, the slack entry is outputted.
 ### The --deleted-dirs switch
 INDXRipper will not output entries in deleted directories by default. This can be changed using the --deleted-dirs switch.
 
-A deleted directory may have some of its clusters overwritten by another directory. This means the entries found in a deleted directory may actually belong to a different directory. The files you see in a deleted directory might not have been placed in the correct path.
+A deleted directory may have some of its clusters overwritten by another directory. This means the entries found in a deleted directory may actually belong to a different directory. Entries in deleted directories can have great value, but remember - some of the files you see might not have been placed in the correct path.
 
 ## Limitations
 * The tool may give false results.
