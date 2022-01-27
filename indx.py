@@ -225,7 +225,7 @@ def get_all_entries_in_attribute(index_allocation_attribute, parent_reference, v
         if is_valid_fixup(record_header):
             yield from get_all_entries_in_record(index_record, record_header, parent_reference)
         else:
-            warning("fixup validation failed for an INDX record. the entire record will be treated as slack space")
+            warning("fixup validation failed for an index record. the entire record will be treated as slack space")
             yield from get_slack_entries_in_record(index_record)
 
 

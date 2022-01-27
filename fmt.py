@@ -38,7 +38,7 @@ OUTPUT_FORMATS = {
                "{size},{alloc_size},{cr_time},{m_time},{a_time},{c_time}\n",
 
         "header": "Source,Path,Flags,FileNumber,SequenceNumber,"
-                  "Size,AllocatedSize,CreationTime,ModificationTime,AccessTime,ChangeTime\n",
+                  "Size,AllocatedSize,CreationTime,ModificationTime,AccessTime,ChangedTime\n",
 
         "fields":
         {

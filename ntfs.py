@@ -261,7 +261,7 @@ def panic_on_invalid_first_record(record_header):
         sys_exit(f"INDXRipper: error: invalid 'FILE' signature in first file record")
 
     if not is_valid_fixup(record_header):
-        sys_exit(f"INDXRipper: error: fixup verification failed for first file record")
+        sys_exit(f"INDXRipper: error: fixup validation failed for first file record")
 
 
 def get_mft_data_attribute(vbr, raw_image):

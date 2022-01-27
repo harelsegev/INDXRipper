@@ -36,8 +36,8 @@ def get_arguments():
     parser.add_argument("-b", metavar="SECTOR_SIZE", type=int, default=512, help="sector size in bytes. default is 512")
     parser.add_argument("-w", choices=["csv", "bodyfile"], default="csv", help="output format. default is csv")
 
+    parser.add_argument("--deleted-dirs", action="store_true", help="display entries in deleted directories")
     parser.add_argument("--slack-only", action="store_true", help="only display entries in slack space")
-    parser.add_argument("--skip-deleted", action="store_true", help="skip entries in deleted directories")
     parser.add_argument("--dedup", action="store_true", help="deduplicate output lines")
     return parser.parse_args()
 
@@ -104,13 +104,14 @@ def get_mft_dict(raw_image, mft_data, vbr):
     for index, sequence, mft_chunk, record_header in get_mft_records(mft_data, vbr):
         if is_directory(record_header):
             values = get_mft_dict_values(vbr, raw_image, mft_chunk, record_header)
+            is_allocated = False
 
             if is_base_record(record_header):
                 is_allocated = is_used(record_header)
                 add_to_mft_dict(mft_dict, (index, sequence), values, is_allocated)
             else:
                 base_reference = get_base_record_reference(record_header)
-                add_to_mft_dict(mft_dict, base_reference, values, False)
+                add_to_mft_dict(mft_dict, base_reference, values, is_allocated)
 
     return mft_dict
 
@@ -172,11 +173,11 @@ def get_record_output(index_entries, parent_path, dedup, output_format):
     return lines
 
 
-def get_output(mft_dict, vbr, root_name, slack_only, skip_deleted, dedup, output_format):
+def get_output(mft_dict, vbr, root_name, slack_only, deleted_dirs, dedup, output_format):
     yield [get_format_header(output_format)]
 
     for key in mft_dict:
-        if not skip_deleted or mft_dict[key]["IS_ALLOCATED"]:
+        if deleted_dirs or mft_dict[key]["IS_ALLOCATED"]:
             if index_allocation_attributes := mft_dict[key]["$INDEX_ALLOCATION"]:
                 parent_path = get_path(mft_dict, key, root_name)
                 index_entries = get_entries(index_allocation_attributes, key, slack_only, vbr)
@@ -191,7 +192,7 @@ def main():
         mft_dict = get_mft_dict(raw_image, mft_data, vbr)
 
         with open(args.outfile, "at+", encoding="utf-8") as outfile:
-            for lines in get_output(mft_dict, vbr, args.m, args.slack_only, args.skip_deleted, args.dedup, args.w):
+            for lines in get_output(mft_dict, vbr, args.m, args.slack_only, args.deleted_dirs, args.dedup, args.w):
                 outfile.writelines(lines)
 
 
