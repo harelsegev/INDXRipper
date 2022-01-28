@@ -71,14 +71,15 @@ Note that the bodyfile format is specific to the sleuthkit and is not fully docu
 
 ### The --slack-only switch
 
-For every entry in slack space, INDXRipper scans the directory for an allocated entry with the same file name. If such entry is found, INDXRipper compares the file references in the two entries. If they match, the slack entry is not outputted.
+Not all the entries in slack space are outputted in this mode.
 
-In any other case, the slack entry is outputted.
+For every entry in slack space, INDXRipper scans the directory for an allocated entry with the same file name. If such entry is found, INDXRipper compares the file references in the two entries. If they match, the slack entry is not outputted. In any other case, the slack entry is outputted.
 
 ### The --deleted-dirs switch
+
 INDXRipper will not output entries in deleted directories by default. This can be changed using the --deleted-dirs switch.
 
-A deleted directory may have some of its clusters overwritten by another directory. This means the entries found in a deleted directory may actually belong to a different directory. Entries in deleted directories can have great value, but remember - some of the files you see might not have been placed in the correct path.
+A deleted directory may have some of its clusters overwritten by another directory. This means the entries found in a deleted directory may actually belong to a different directory. INDXRipper should ignore this kind of entries, but it may fail to identify all of them. Entries in deleted directories can have great value, but remember - some of the files outputted might not have been placed in the correct path.
 
 ## Limitations
 * The tool may give false results.
