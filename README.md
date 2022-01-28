@@ -79,7 +79,7 @@ For every entry in slack space, INDXRipper scans the directory for an allocated 
 
 INDXRipper will not output entries in deleted directories by default. This can be changed using the --deleted-dirs switch.
 
-A deleted directory may have some of its clusters overwritten by another directory. This means the entries found in a deleted directory may actually belong to a different directory. INDXRipper should ignore this kind of entries, but it may fail to identify all of them. Entries in deleted directories can have great value, but remember - some of the files outputted might not have been placed in the correct path.
+A deleted directory may have some of its clusters overwritten by another directory. This means the entries found in a deleted directory may actually belong to a different directory. INDXRipper should detect and ignore this kind of entries, but in some cases detecting them may not be possible. Entries in deleted directories can have great value, but remember - some of the files outputted in this mode might have been placed in the wrong path.
 
 ## Limitations
 * The tool may give false results.
