@@ -88,30 +88,27 @@ def get_mft_records(mft_data, vbr):
                 yield current_record, get_sequence_number(record_header), mft_chunk, record_header
 
 
-def add_to_mft_dict(mft_dict, key, values, is_allocated):
+def add_to_mft_dict(mft_dict, key, values):
     if key not in mft_dict:
         mft_dict[key] = values
-        mft_dict[key]["IS_ALLOCATED"] = is_allocated
     else:
         mft_dict[key]["$INDEX_ALLOCATION"] += values["$INDEX_ALLOCATION"]
         mft_dict[key]["$FILE_NAME"] += values["$FILE_NAME"]
-        mft_dict[key]["IS_ALLOCATED"] = mft_dict[key]["IS_ALLOCATED"] or is_allocated
 
 
-def get_mft_dict(raw_image, mft_data, vbr):
+def get_mft_dict(raw_image, mft_data, deleted_dirs, vbr):
     mft_dict = dict()
 
     for index, sequence, mft_chunk, record_header in get_mft_records(mft_data, vbr):
         if is_directory(record_header):
-            values = get_mft_dict_values(vbr, raw_image, mft_chunk, record_header)
-            is_allocated = False
+            if deleted_dirs or is_used(record_header):
+                values = get_mft_dict_values(vbr, raw_image, mft_chunk, record_header)
 
-            if is_base_record(record_header):
-                is_allocated = is_used(record_header)
-                add_to_mft_dict(mft_dict, (index, sequence), values, is_allocated)
-            else:
-                base_reference = get_base_record_reference(record_header)
-                add_to_mft_dict(mft_dict, base_reference, values, is_allocated)
+                if is_base_record(record_header):
+                    add_to_mft_dict(mft_dict, (index, sequence), values)
+                else:
+                    base_reference = get_base_record_reference(record_header)
+                    add_to_mft_dict(mft_dict, base_reference, values)
 
     return mft_dict
 
@@ -173,15 +170,14 @@ def get_record_output(index_entries, parent_path, dedup, output_format):
     return lines
 
 
-def get_output(mft_dict, vbr, root_name, slack_only, deleted_dirs, dedup, output_format):
+def get_output(mft_dict, vbr, root_name, slack_only, dedup, output_format):
     yield [get_format_header(output_format)]
 
     for key in mft_dict:
-        if deleted_dirs or mft_dict[key]["IS_ALLOCATED"]:
-            if index_allocation_attributes := mft_dict[key]["$INDEX_ALLOCATION"]:
-                parent_path = get_path(mft_dict, key, root_name)
-                index_entries = get_entries(index_allocation_attributes, key, slack_only, vbr)
-                yield get_record_output(index_entries, parent_path, dedup, output_format)
+        if index_allocation_attributes := mft_dict[key]["$INDEX_ALLOCATION"]:
+            parent_path = get_path(mft_dict, key, root_name)
+            index_entries = get_entries(index_allocation_attributes, key, slack_only, vbr)
+            yield get_record_output(index_entries, parent_path, dedup, output_format)
 
 
 def main():
@@ -189,10 +185,10 @@ def main():
     with open(args.image, "rb") as raw_image:
         vbr = get_boot_sector(raw_image, args.o * args.b)
         mft_data = get_mft_data_attribute(vbr, raw_image)
-        mft_dict = get_mft_dict(raw_image, mft_data, vbr)
+        mft_dict = get_mft_dict(raw_image, mft_data, args.deleted_dirs, vbr)
 
         with open(args.outfile, "at+", encoding="utf-8") as outfile:
-            for lines in get_output(mft_dict, vbr, args.m, args.slack_only, args.deleted_dirs, args.dedup, args.w):
+            for lines in get_output(mft_dict, vbr, args.m, args.slack_only, args.dedup, args.w):
                 outfile.writelines(lines)
 
 
