@@ -246,14 +246,14 @@ def parse_filename_attribute(filename_attribute):
     return FILENAME_ATTRIBUTE.parse(filename_attribute)
 
 
-def get_non_resident_attribute(vbr, raw_image, mft_chunk, attribute_header):
+def get_non_resident_attribute(vbr, raw_image, mft_chunk, attribute_header, is_allocated):
     dataruns_offset_in_chunk = attribute_header["OffsetInChunk"] + attribute_header["Metadata"]["DataRunsOffset"]
     dataruns = get_dataruns(mft_chunk, dataruns_offset_in_chunk)
 
     if not dataruns:
         raise EmptyNonResidentAttributeError
 
-    return NonResidentStream(vbr["BytsPerClus"], vbr["OffsetInImage"], raw_image, dataruns)
+    return NonResidentStream(vbr["BytsPerClus"], vbr["OffsetInImage"], raw_image, dataruns, is_allocated)
 
 
 def panic_on_invalid_first_record(record_header):
@@ -272,7 +272,7 @@ def get_mft_data_attribute(vbr, raw_image):
     panic_on_invalid_first_record(record_headers[0])
     attribute_headers = get_attribute_headers(mft_chunk, record_headers[0])
     mft_data_attribute_header = next(get_attribute_header(attribute_headers, "DATA"))
-    return get_non_resident_attribute(vbr, raw_image, mft_chunk, mft_data_attribute_header)
+    return get_non_resident_attribute(vbr, raw_image, mft_chunk, mft_data_attribute_header, True)
 
 
 def get_mft_chunks(vbr, mft_data_attribute_stream):

@@ -41,7 +41,7 @@ def correct_offsets(dataruns):
 
 
 class NonResidentStream(BytesIO):
-    def __init__(self, bytes_per_cluster, partition_offset, raw_image, dataruns):
+    def __init__(self, bytes_per_cluster, partition_offset, raw_image, dataruns, is_allocated):
         super().__init__()
         self.raw_image = raw_image
         self.bytes_per_cluster = bytes_per_cluster
@@ -53,6 +53,8 @@ class NonResidentStream(BytesIO):
         self.physical_offset = self.current_datarun_offset()
         self.virtual_offset = 0
         self.offset_in_datarun = 0
+
+        self.is_allocated = is_allocated
 
     def current_datarun(self):
         return self.dataruns[self.dataruns_index]

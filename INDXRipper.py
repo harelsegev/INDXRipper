@@ -55,19 +55,21 @@ def is_directory_index_allocation(attribute_header):
     return get_attribute_type(attribute_header) == "INDEX_ALLOCATION" and get_attribute_name(attribute_header) == "$I30"
 
 
-def add_to_mft_values(vbr, raw_image, mft_chunk, attribute_header, values):
+def add_to_mft_values(vbr, raw_image, mft_chunk, attribute_header, is_record_used, values):
     if get_attribute_type(attribute_header) == "FILE_NAME":
         values["$FILE_NAME"].append(get_filename_attribute(mft_chunk, attribute_header))
 
     elif is_directory_index_allocation(attribute_header):
-        values["$INDEX_ALLOCATION"].append(get_non_resident_attribute(vbr, raw_image, mft_chunk, attribute_header))
+        values["$INDEX_ALLOCATION"].append(
+            get_non_resident_attribute(vbr, raw_image, mft_chunk, attribute_header, is_record_used)
+        )
 
 
 def get_mft_dict_values(vbr, raw_image, mft_chunk, record_header):
     values = {"$FILE_NAME": [], "$INDEX_ALLOCATION": []}
     for attribute_header in get_attribute_headers(mft_chunk, record_header):
         with suppress(EmptyNonResidentAttributeError):
-            add_to_mft_values(vbr, raw_image, mft_chunk, attribute_header, values)
+            add_to_mft_values(vbr, raw_image, mft_chunk, attribute_header, is_used(record_header), values)
 
     return values
 

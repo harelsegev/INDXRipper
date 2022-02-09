@@ -17,7 +17,8 @@ def to_iso(timestamp: datetime):
 
 
 COMMON_FIELDS = {
-    "full_path": lambda index_entry: index_entry["ParentPath"] + "/" + index_entry["FilenameInUnicode"],
+    "parent_path": lambda index_entry: index_entry["ParentPath"] if index_entry["BelongsToParent"] else "<Unknown>",
+    "full_path": lambda index_entry: COMMON_FIELDS["parent_path"](index_entry) + "/" + index_entry["FilenameInUnicode"],
 
     "index": lambda index_entry: index_entry["FILE_REFERENCE"]["FileRecordNumber"],
     "sequence": lambda index_entry: index_entry["FILE_REFERENCE"]["SequenceNumber"],

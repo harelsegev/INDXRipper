@@ -3,6 +3,7 @@
     Author: Harel Segev
     5/12/2021
 """
+import itertools
 
 from construct import Struct, Const, Padding, Array, Seek, Optional, StopIf, FlagsEnum, Enum, Check
 from construct import PaddedString, Adapter, CheckError, Computed, Int8ul, Int16ul, Int32ul, Int64ul
@@ -182,14 +183,17 @@ def get_slack_entry_offsets(index_slack):
             yield entry_offset
 
 
-def get_slack_entries_in_record(index_slack):
+def get_slack_entries_in_record(index_slack, record_belongs_to_parent):
     index_slack_stream = BytesIO(index_slack)
 
     for entry_offset in get_slack_entry_offsets(index_slack):
         index_slack_stream.seek(entry_offset)
 
         with suppress(StreamError, CheckError, OverflowError, UnicodeDecodeError):
-            yield INDEX_ENTRY.parse_stream(index_slack_stream, is_slack=True)
+            entry = INDEX_ENTRY.parse_stream(index_slack_stream, is_slack=True)
+
+            entry["BelongsToParent"] = record_belongs_to_parent
+            yield entry
 
 
 def get_parent_reference_as_key(index_entry):
@@ -201,32 +205,36 @@ def remove_allocated_space(index_record, record_header):
     index_record[:0] = b"\x00" * TIMESTAMPS_OFFSET_IN_ENTRY
 
 
-def get_all_entries_in_record(index_record, record_header, parent_reference):
+def get_all_entries_in_record(index_record, record_header, parent_reference, is_allocated):
     allocated_entries = get_allocated_entries_in_record(index_record, record_header)
+    record_belongs_to_parent = True
 
-    with suppress(StopIteration):
+    try:
         first_entry = next(allocated_entries)
+        record_belongs_to_parent = get_parent_reference_as_key(first_entry) == parent_reference
 
-        if get_parent_reference_as_key(first_entry) != parent_reference:
-            # this index entry doesn't belong to the directory. ignoring the entire index record
-            return
+        for entry in itertools.chain([first_entry], allocated_entries):
+            entry["BelongsToParent"] = record_belongs_to_parent
+            yield entry
 
-        yield first_entry
-
-    for entry in allocated_entries:
-        yield entry
+    except StopIteration:
+        if not is_allocated:
+            # this index record might belong to the directory, but we cannot say for sure.
+            record_belongs_to_parent = False
 
     remove_allocated_space(index_record, record_header)
-    yield from get_slack_entries_in_record(index_record)
+    yield from get_slack_entries_in_record(index_record, record_belongs_to_parent)
 
 
 def get_all_entries_in_attribute(index_allocation_attribute, parent_reference, vbr):
+    is_allocated = index_allocation_attribute.is_allocated
+
     for index_record, record_header in get_index_records(index_allocation_attribute, vbr):
         if is_valid_fixup(record_header):
-            yield from get_all_entries_in_record(index_record, record_header, parent_reference)
+            yield from get_all_entries_in_record(index_record, record_header, parent_reference, is_allocated)
         else:
             warning("fixup validation failed for an index record. the entire record will be treated as slack space")
-            yield from get_slack_entries_in_record(index_record)
+            yield from get_slack_entries_in_record(index_record, False)
 
 
 def get_all_entries(index_allocation_attributes, parent_reference, vbr):
@@ -234,17 +242,13 @@ def get_all_entries(index_allocation_attributes, parent_reference, vbr):
         yield from get_all_entries_in_attribute(index_allocation_attribute, parent_reference, vbr)
 
 
-def get_slack_entries_helper(index_allocation_attributes, parent_reference, vbr):
-    allocated_entries, slack_entries = {}, []
-
-    for entry in get_all_entries(index_allocation_attributes, parent_reference, vbr):
+def get_slack_entries_helper(index_allocation_attribute, allocated_entries, slack_entries, parent_reference, vbr):
+    for entry in get_all_entries_in_attribute(index_allocation_attribute, parent_reference, vbr):
         if entry["IsSlack"]:
             slack_entries.append(entry)
         else:
             entry_filename = entry["FilenameInUnicode"]
             allocated_entries[entry_filename] = get_file_reference(entry)
-
-    return allocated_entries, slack_entries
 
 
 def get_file_reference(entry):
@@ -252,13 +256,19 @@ def get_file_reference(entry):
 
 
 def get_slack_entries(index_allocation_attributes, parent_reference, vbr):
-    allocated_entries, slack_entries = get_slack_entries_helper(index_allocation_attributes, parent_reference, vbr)
+    alloc_entries, slack_entries = {}, []
+
+    for index_allocation_attribute in index_allocation_attributes:
+        if index_allocation_attribute.is_allocated:
+            get_slack_entries_helper(index_allocation_attribute, alloc_entries, slack_entries, parent_reference, vbr)
+        else:
+            yield from get_all_entries_in_attribute(index_allocation_attribute, parent_reference, vbr)
 
     for entry in slack_entries:
         filename = entry["FilenameInUnicode"]
 
-        if filename in allocated_entries:
-            if not get_file_reference(entry) == allocated_entries[filename]:
+        if filename in alloc_entries:
+            if not get_file_reference(entry) == alloc_entries[filename]:
                 yield entry
 
         else:
