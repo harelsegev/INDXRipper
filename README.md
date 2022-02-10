@@ -69,7 +69,7 @@ Note that the bodyfile format is specific to the sleuthkit and is not fully docu
 
 ### The --slack-only switch
 
-A lot of the entries in slack space are old entries of active files. Those old entries may contain a "snapshot" of the file's metadata from an earlier point in time. Although this information may be useful in some cases, most of the time it is not necessary to answer your investigative questions.
+A lot of the entries in slack space are old entries of active files. Those old entries contain a "snapshot" of the file's metadata from an earlier point in time. Although this information may be useful in some cases, most of the time it is not necessary to answer my investigative questions.
 
 In --slack-only mode, **some** of those entries are filtered out, to prevent information overflow in your timeline. The filtering is done as follows:
 
@@ -79,11 +79,11 @@ This only happens for active directories, though.  In a deleted directory, all t
 
 ### The --deleted-dirs switch
 
-INDXRipper will not output entries in deleted directories by default. This can be changed using the --deleted-dirs switch. In this mode, files may not be outputted with full paths.
+INDXRipper will not output entries in deleted directories by default. This can be changed using the --deleted-dirs switch. In this mode, files may be outputted with partial paths.
 
 #### $Orphan
 
-Files and folders listed under **$Orphan** are deleted. Particularly, their parent folder is also deleted, and their full path cannot be resolved.
+Files and folders listed under **$Orphan** are deleted. Their parent folder is also deleted, and their full path cannot be resolved.
 
 #### \<Unknown\>
 
