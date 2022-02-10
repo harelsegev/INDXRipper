@@ -8,14 +8,13 @@ See: [sleuthkit](https://github.com/sleuthkit/sleuthkit)
 
 ## Motivation
 
-In NTFS, folders store entries for every file they contain in a special attribute, called $INDEX_ALLOCATION. These entries are called index entries, and they contain some of the file's metadata:
-
+In NTFS, $INDEX_ALLOCATION attributes may be used to keep track of the files in a folder. A folder's $INDEX_ALLOCATION attribute contains an entry for every file in that folder. Those entries are called index entries, and they contain some of the file's metadata:
 * File name
 * File size
 * Allocated size of file (size on disk)
 * A set of MACB timestamps
 
-The slack space in the $INDEX_ALLOCATION attributes may contain index entries of deleted files. Such entries may last long after the file's MFT record is lost. Finding these index entries may help you prove a file existed on a system.
+$INDEX_ALLOCATION attributes often contain a significant amount of slack space, which may contain index entries of deleted files. A file's index entry may last long after the file's MFT record is lost. Finding these index entries may help you prove a file existed on a system.
 
 ## Installation
 
@@ -30,11 +29,11 @@ Alternatively, you can use the Windows packaged release.
 ## Usage Examples
 
 ```bash
-# process the partition in sector 1026048, get all index entries
+# process the partition in sector 1026048, allocated directories only
 python INDXRipper.py -o 1026048 raw_disk.dd output.csv
 
 # process a partition image, get all index entries
-python INDXRipper.py ntfs.001 output.csv
+python INDXRipper.py --deleted-dirs ntfs.001 output.csv
 
 # process the D: drive, --slack-only mode, bodyfile output, append "D:" to all the paths
 python INDXRipper.py -m D: -w bodyfile --slack-only  \\.\D: output.bodyfile
@@ -48,7 +47,7 @@ INDXRipper is best used in combination with other tools to create a super timeli
 fls -o 128 -m C: -r image.raw > temp.bodyfile
 
 # INDXRipper will append its output to the end of temp.bodyfile
-python INDXRipper.py -o 128 -m C: -w bodyfile --slack-only --dedup image.raw temp.bodyfile
+python INDXRipper.py -o 128 -m C: -w bodyfile --deleted-dirs --slack-only --dedup image.raw temp.bodyfile
 
 mactime -z UTC -b temp.bodyfile > image.timeline
 ```
@@ -65,26 +64,36 @@ Note that the bodyfile format is specific to the sleuthkit and is not fully docu
 * Applies fixups for index records and MFT records
 * Handles $INDEX_ALLOCATION and $FILE_NAME attributes in extension records
 * Full paths are reconstructed using the parent directory references from the MFT records.
-* Orphan directories are listed under "/$Orphan"
 * Works on live Windows NTFS drives, using device paths
 * All times outputted are in UTC
 
 ### The --slack-only switch
 
-Not all the entries in slack space are outputted in this mode.
+A lot of the entries in slack space are old entries of active files. Those old entries may contain a "snapshot" of the file's metadata from an earlier point in time. Although this information may be useful in some cases, most of the time it is not necessary to answer your investigative questions.
+
+In --slack-only mode, **some** of those entries are filtered out, to prevent information overflow in your timeline. The filtering is done as follows:
 
 For every entry in slack space, INDXRipper scans the directory for an allocated entry with the same file name. If such entry is found, INDXRipper compares the file references in the two entries. If they match, the slack entry is not outputted. In any other case, the slack entry is outputted.
 
+This only happens for active directories, though.  In a deleted directory, all the entries found will be outputted - including allocated ones.
+
 ### The --deleted-dirs switch
 
-INDXRipper will not output entries in deleted directories by default. This can be changed using the --deleted-dirs switch.
+INDXRipper will not output entries in deleted directories by default. This can be changed using the --deleted-dirs switch. In this mode, files may not be outputted with full paths.
 
-A deleted directory may have some of its clusters overwritten by another directory. This means the entries found in a deleted directory may actually belong to a different directory. INDXRipper should detect and ignore this kind of entries, but in some cases detecting them may not be possible. Entries in deleted directories can have great value, but remember - some of the files outputted in this mode might have been placed in the wrong path.
+#### $Orphan
+
+Files and folders listed under **$Orphan** are deleted. Particularly, their parent folder is also deleted, and their full path cannot be resolved.
+
+#### \<Unknown\>
+
+A deleted directory may have some of its clusters overwritten by another directory. This means the index records found in a deleted directory may actually belong to a different directory.
+
+A file listed under **\<Unknown\>** may or may not be deleted. Its entry was found in a deleted directory, and INDXRipper could not tell if this deleted directory is indeed this file's parent directory. 
 
 ## Limitations
 * The tool may give false results.
 * Partially overwritten entries may not be found. If they are found, though, the tool may give you false information.
-* Results for deleted directories are unreliable.
 * The tool currently supports NTFS version 3.1 only
 
 ### What this tool doesn't do
