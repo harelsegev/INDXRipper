@@ -261,6 +261,7 @@ def get_slack_entries(index_allocation_attributes, parent_reference, vbr):
     for index_allocation_attribute in index_allocation_attributes:
         if index_allocation_attribute.is_allocated:
             get_slack_entries_helper(index_allocation_attribute, alloc_entries, slack_entries, parent_reference, vbr)
+
         else:
             yield from get_all_entries_in_attribute(index_allocation_attribute, parent_reference, vbr)
 
