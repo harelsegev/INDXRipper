@@ -3,7 +3,6 @@
     Author: Harel Segev
     5/12/2021
 """
-import itertools
 
 from construct import Struct, Const, Padding, Array, Seek, Optional, StopIf, FlagsEnum, Enum, Check
 from construct import PaddedString, Adapter, CheckError, Computed, Int8ul, Int16ul, Int32ul, Int64ul
@@ -12,6 +11,7 @@ from construct import StreamError
 from datetime import datetime, timedelta
 from contextlib import suppress
 from io import BytesIO
+import itertools
 import re
 
 from ntfs import FILE_REFERENCE
@@ -255,6 +255,18 @@ def get_file_reference(entry):
     return entry["FILE_REFERENCE"]["FileRecordNumber"], entry["FILE_REFERENCE"]["SequenceNumber"]
 
 
+def filter_slack_entries(allocated_entries, slack_entries):
+    for entry in slack_entries:
+        filename = entry["FilenameInUnicode"]
+
+        if filename in allocated_entries:
+            if not get_file_reference(entry) == allocated_entries[filename]:
+                yield entry
+
+        else:
+            yield entry
+
+
 def get_slack_entries(index_allocation_attributes, parent_reference, vbr):
     alloc_entries, slack_entries = {}, []
 
@@ -265,15 +277,7 @@ def get_slack_entries(index_allocation_attributes, parent_reference, vbr):
         else:
             yield from get_all_entries_in_attribute(index_allocation_attribute, parent_reference, vbr)
 
-    for entry in slack_entries:
-        filename = entry["FilenameInUnicode"]
-
-        if filename in alloc_entries:
-            if not get_file_reference(entry) == alloc_entries[filename]:
-                yield entry
-
-        else:
-            yield entry
+    yield from filter_slack_entries(alloc_entries, slack_entries)
 
 
 def get_entries(index_allocation_attributes, parent_reference, slack_only, vbr):
