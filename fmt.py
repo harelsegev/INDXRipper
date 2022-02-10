@@ -38,8 +38,8 @@ OUTPUT_FORMATS = {
         "fmt": "{source},\"{full_path}\",{flags},{index},{sequence},"
                "{size},{alloc_size},{cr_time},{m_time},{a_time},{c_time}\n",
 
-        "header": "Source,Path,Flags,FileNumber,SequenceNumber,"
-                  "Size,AllocatedSize,CreationTime,ModificationTime,AccessTime,ChangedTime\n",
+        "header": "Source,Path,Flags,FileNumber,SequenceNumber,Size,"
+                  "AllocatedSize,CreationTime,ModificationTime,AccessTime,ChangedTime\n",
 
         "fields":
         {

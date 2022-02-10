@@ -11,7 +11,7 @@ from construct import StreamError
 from datetime import datetime, timedelta
 from contextlib import suppress
 from io import BytesIO
-import itertools
+
 import re
 
 from ntfs import FILE_REFERENCE
@@ -205,22 +205,24 @@ def remove_allocated_space(index_record, record_header):
     index_record[:0] = b"\x00" * TIMESTAMPS_OFFSET_IN_ENTRY
 
 
+def concat(first_entry, allocated_entries):
+    yield first_entry
+    yield from allocated_entries
+
+
 def get_all_entries_in_record(index_record, record_header, parent_reference, is_allocated):
     allocated_entries = get_allocated_entries_in_record(index_record, record_header)
-    record_belongs_to_parent = True
 
     try:
         first_entry = next(allocated_entries)
         record_belongs_to_parent = get_parent_reference_as_key(first_entry) == parent_reference
 
-        for entry in itertools.chain([first_entry], allocated_entries):
+        for entry in concat(first_entry, allocated_entries):
             entry["BelongsToParent"] = record_belongs_to_parent
             yield entry
 
     except StopIteration:
-        if not is_allocated:
-            # this index record might belong to the directory, but we cannot say for sure.
-            record_belongs_to_parent = False
+        record_belongs_to_parent = is_allocated
 
     remove_allocated_space(index_record, record_header)
     yield from get_slack_entries_in_record(index_record, record_belongs_to_parent)

@@ -8,7 +8,7 @@ See: [sleuthkit](https://github.com/sleuthkit/sleuthkit)
 
 ## Motivation
 
-In NTFS, $INDEX_ALLOCATION attributes may be used to keep track of the files in a folder. A folder's $INDEX_ALLOCATION attribute contains an entry for every file in that folder. Those entries are called index entries, and they contain some of the file's metadata:
+In NTFS, $INDEX_ALLOCATION attributes are used to keep track of the files in a folder. A folder's $INDEX_ALLOCATION attribute contains an entry for every file in that folder. These entries are called index entries, and they contain some of the file's metadata:
 * File name
 * File size
 * Allocated size of file (size on disk)
@@ -47,7 +47,7 @@ INDXRipper is best used in combination with other tools to create a super timeli
 fls -o 128 -m C: -r image.raw > temp.bodyfile
 
 # INDXRipper will append its output to the end of temp.bodyfile
-python INDXRipper.py -o 128 -m C: -w bodyfile --deleted-dirs --slack-only --dedup image.raw temp.bodyfile
+INDXRipper -o 128 -m C: -w bodyfile --deleted-dirs --slack-only --dedup image.raw temp.bodyfile
 
 mactime -z UTC -b temp.bodyfile > image.timeline
 ```
@@ -89,7 +89,7 @@ Files and folders listed under **$Orphan** are deleted. Particularly, their pare
 
 A deleted directory may have some of its clusters overwritten by another directory. This means the index records found in a deleted directory may actually belong to a different directory.
 
-A file listed under **\<Unknown\>** may or may not be deleted. Its entry was found in a deleted directory, and INDXRipper could not tell if this deleted directory is indeed this file's parent directory. 
+A file listed under **\<Unknown\>** may or may not be deleted. Its entry was found in a deleted directory, but INDXRipper could not tell if this deleted directory is indeed this file's parent directory. 
 
 ## Limitations
 * The tool may give false results.
