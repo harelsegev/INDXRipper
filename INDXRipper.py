@@ -14,7 +14,8 @@ from ntfs import is_valid_fixup, is_valid_record_signature, get_attribute_header
 from ntfs import EmptyNonResidentAttributeError, get_non_resident_attribute, is_directory
 from ntfs import get_mft_chunks, get_record_headers, apply_fixup, get_sequence_number
 
-from indx import get_entries
+from indx import get_index_records, is_slack, get_index_entry_parent_reference, get_index_entry_filename, \
+    get_index_entry_file_reference
 from fmt import get_entry_output, get_format_header, warning
 
 
@@ -42,7 +43,7 @@ def get_arguments():
     return parser.parse_args()
 
 
-def get_parent_reference(filename_attribute):
+def get_filename_parent_reference(filename_attribute):
     parent_reference = filename_attribute["ParentDirectoryReference"]
     return parent_reference["FileRecordNumber"], parent_reference["SequenceNumber"]
 
@@ -55,21 +56,17 @@ def is_directory_index_allocation(attribute_header):
     return get_attribute_type(attribute_header) == "INDEX_ALLOCATION" and get_attribute_name(attribute_header) == "$I30"
 
 
-def add_to_mft_values(vbr, raw_image, mft_chunk, attribute_header, is_record_used, values):
-    if get_attribute_type(attribute_header) == "FILE_NAME":
-        values["$FILE_NAME"].append(get_filename_attribute(mft_chunk, attribute_header))
-
-    elif is_directory_index_allocation(attribute_header):
-        values["$INDEX_ALLOCATION"].append(
-            get_non_resident_attribute(vbr, raw_image, mft_chunk, attribute_header, is_record_used)
-        )
-
-
-def get_mft_dict_values(vbr, raw_image, mft_chunk, record_header):
+def get_mft_dict_values(vbr, raw_image, mft_chunk, record_header, is_allocated):
     values = {"$FILE_NAME": [], "$INDEX_ALLOCATION": []}
+
     for attribute_header in get_attribute_headers(mft_chunk, record_header):
-        with suppress(EmptyNonResidentAttributeError):
-            add_to_mft_values(vbr, raw_image, mft_chunk, attribute_header, is_used(record_header), values)
+        if get_attribute_type(attribute_header) == "FILE_NAME":
+            values["$FILE_NAME"].append(get_filename_attribute(mft_chunk, attribute_header))
+
+        elif is_directory_index_allocation(attribute_header):
+            with suppress(EmptyNonResidentAttributeError):
+                index_attribute = get_non_resident_attribute(vbr, raw_image, mft_chunk, attribute_header, is_allocated)
+                values["$INDEX_ALLOCATION"].append(index_attribute)
 
     return values
 
@@ -103,8 +100,8 @@ def get_mft_dict(raw_image, mft_data, deleted_dirs, vbr):
 
     for index, sequence, mft_chunk, record_header in get_mft_records(mft_data, vbr):
         if is_directory(record_header):
-            if deleted_dirs or is_used(record_header):
-                values = get_mft_dict_values(vbr, raw_image, mft_chunk, record_header)
+            if is_allocated := is_used(record_header) or deleted_dirs:
+                values = get_mft_dict_values(vbr, raw_image, mft_chunk, record_header, is_allocated)
 
                 if is_base_record(record_header):
                     add_to_mft_dict(mft_dict, (index, sequence), values)
@@ -142,7 +139,7 @@ def get_path_helper(mft_dict, key):
     else:
         try:
             filename = get_first_filename(mft_dict, key)
-            parent_reference = get_parent_reference(filename)
+            parent_reference = get_filename_parent_reference(filename)
             path_cache[key] = get_path_helper(mft_dict, parent_reference) + "/" + filename["FilenameInUnicode"]
 
         except NoFilenameAttributeInRecordError:
@@ -155,6 +152,84 @@ def get_path(mft_dict, key, mount_point):
     return mount_point + get_path_helper(mft_dict, key)
 
 
+def get_parent_path(first_entry, mft_dict, key, root_name, is_allocated):
+    if not is_slack(first_entry):
+        parent_key = get_index_entry_parent_reference(first_entry)
+        return get_path(mft_dict, parent_key, root_name)
+
+    else:
+        if is_allocated:
+            return get_path(mft_dict, key, root_name)
+        else:
+            return "<Unknown>"
+
+
+def get_index_entries_in_attribute_helper(first_entry, index_record, parent_path):
+    first_entry["ParentPath"] = parent_path
+    yield first_entry
+
+    for entry in index_record:
+        entry["ParentPath"] = parent_path
+        yield entry
+
+
+def get_index_entries_in_attribute(index_attribute, vbr, mft_dict, key, root_name):
+    is_allocated = index_attribute.is_allocated
+
+    for index_record in get_index_records(index_attribute, vbr):
+        with suppress(StopIteration):
+            first_entry = next(index_record)
+            parent_path = get_parent_path(first_entry, mft_dict, key, root_name, is_allocated)
+
+            yield from get_index_entries_in_attribute_helper(first_entry, index_record, parent_path)
+
+
+def get_all_index_entries(index_attributes, vbr, mft_dict, key, root_name):
+    for index_attribute in index_attributes:
+        yield from get_index_entries_in_attribute(index_attribute, vbr, mft_dict, key, root_name)
+
+
+def get_slack_entries_helper(index_attribute, allocated_entries, slack_entries, vbr, mft_dict, key, root_name):
+    for entry in get_index_entries_in_attribute(index_attribute, vbr, mft_dict, key, root_name):
+        if is_slack(entry):
+            slack_entries.append(entry)
+        else:
+            filename = get_index_entry_filename(entry)
+            allocated_entries[filename] = get_index_entry_file_reference(entry)
+
+
+def filter_slack_entries(allocated_entries, slack_entries):
+    for entry in slack_entries:
+        filename = entry["FilenameInUnicode"]
+
+        if filename in allocated_entries:
+            if not get_index_entry_file_reference(entry) == allocated_entries[filename]:
+                yield entry
+
+        else:
+            yield entry
+
+
+def get_slack_index_entries(index_attributes, vbr, mft_dict, key, root_name):
+    allocated_entries, slack_entries = {}, []
+
+    for index_attribute in index_attributes:
+        if index_attribute.is_allocated:
+            get_slack_entries_helper(index_attribute, allocated_entries, slack_entries, vbr, mft_dict, key, root_name)
+
+        else:
+            yield from get_index_entries_in_attribute(index_attribute, vbr, mft_dict, key, root_name)
+
+    yield from filter_slack_entries(allocated_entries, slack_entries)
+
+
+def get_index_entries(index_attributes, vbr, mft_dict, key, root_name, slack_only):
+    if slack_only:
+        yield from get_slack_index_entries(index_attributes, vbr, mft_dict, key, root_name)
+    else:
+        yield from get_all_index_entries(index_attributes, vbr, mft_dict, key, root_name)
+
+
 def get_collection(dedup):
     if dedup:
         return set(), set.add
@@ -162,24 +237,23 @@ def get_collection(dedup):
         return list(), list.append
 
 
-def get_record_output(index_entries, parent_path, dedup, output_format):
+def get_output_lines_helper(index_entries, dedup, output_format):
     lines, add_line = get_collection(dedup)
 
     for index_entry in index_entries:
-        line = get_entry_output(index_entry, parent_path, output_format)
+        line = get_entry_output(index_entry, output_format)
         add_line(lines, line)
 
     return lines
 
 
-def get_output(mft_dict, vbr, root_name, slack_only, dedup, output_format):
+def get_output_lines(mft_dict, vbr, root_name, slack_only, dedup, output_format):
     yield [get_format_header(output_format)]
 
     for key in mft_dict:
-        if index_allocation_attributes := mft_dict[key]["$INDEX_ALLOCATION"]:
-            parent_path = get_path(mft_dict, key, root_name)
-            index_entries = get_entries(index_allocation_attributes, key, slack_only, vbr)
-            yield get_record_output(index_entries, parent_path, dedup, output_format)
+        if index_attributes := mft_dict[key]["$INDEX_ALLOCATION"]:
+            index_entries = get_index_entries(index_attributes, vbr, mft_dict, key, root_name, slack_only)
+            yield get_output_lines_helper(index_entries, dedup, output_format)
 
 
 def main():
@@ -190,7 +264,7 @@ def main():
         mft_dict = get_mft_dict(raw_image, mft_data, args.deleted_dirs, vbr)
 
         with open(args.outfile, "at+", encoding="utf-8") as outfile:
-            for lines in get_output(mft_dict, vbr, args.m, args.slack_only, args.dedup, args.w):
+            for lines in get_output_lines(mft_dict, vbr, args.m, args.slack_only, args.dedup, args.w):
                 outfile.writelines(lines)
 
 

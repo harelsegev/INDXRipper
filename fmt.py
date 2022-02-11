@@ -17,8 +17,7 @@ def to_iso(timestamp: datetime):
 
 
 COMMON_FIELDS = {
-    "parent_path": lambda index_entry: index_entry["ParentPath"] if index_entry["BelongsToParent"] else "<Unknown>",
-    "full_path": lambda index_entry: COMMON_FIELDS["parent_path"](index_entry) + "/" + index_entry["FilenameInUnicode"],
+    "full_path": lambda index_entry: index_entry["ParentPath"] + "/" + index_entry["FilenameInUnicode"],
 
     "index": lambda index_entry: index_entry["FILE_REFERENCE"]["FileRecordNumber"],
     "sequence": lambda index_entry: index_entry["FILE_REFERENCE"]["SequenceNumber"],
@@ -100,9 +99,8 @@ def populate_fmt_dict(fmt_dict, index_entry, output_format):
             fmt_dict[field] = adapted_fields[field](fmt_dict[field])
 
 
-def get_entry_output(index_entry, parent_path, output_format):
+def get_entry_output(index_entry, output_format):
     fmt_dict = {}
-    index_entry["ParentPath"] = parent_path
     populate_fmt_dict(fmt_dict, index_entry, output_format)
     return OUTPUT_FORMATS[output_format]["fmt"].format(**fmt_dict)
 

@@ -11,7 +11,6 @@ from construct import StreamError
 from datetime import datetime, timedelta
 from contextlib import suppress
 from io import BytesIO
-
 import re
 
 from ntfs import FILE_REFERENCE
@@ -88,7 +87,7 @@ INDEX_ENTRY = Struct(
 )
 
 
-def get_index_records_helper(index_allocation_attribute, vbr):
+def get_raw_index_records_helper(index_allocation_attribute, vbr):
     while current_record := index_allocation_attribute.read(vbr["BytsPerIndx"]):
         yield current_record
 
@@ -122,8 +121,8 @@ def apply_fixup(index_record, record_header, vbr):
     return True
 
 
-def get_index_records(index_allocation_attribute, vbr):
-    for index_record in get_index_records_helper(index_allocation_attribute, vbr):
+def get_raw_index_records(index_allocation_attribute, vbr):
+    for index_record in get_raw_index_records_helper(index_allocation_attribute, vbr):
         record_header = get_index_record_header(index_record)
 
         if is_valid_index_record(record_header):
@@ -183,21 +182,14 @@ def get_slack_entry_offsets(index_slack):
             yield entry_offset
 
 
-def get_slack_entries_in_record(index_slack, record_belongs_to_parent):
+def get_entries_in_slack(index_slack):
     index_slack_stream = BytesIO(index_slack)
 
     for entry_offset in get_slack_entry_offsets(index_slack):
         index_slack_stream.seek(entry_offset)
 
         with suppress(StreamError, CheckError, OverflowError, UnicodeDecodeError):
-            entry = INDEX_ENTRY.parse_stream(index_slack_stream, is_slack=True)
-
-            entry["BelongsToParent"] = record_belongs_to_parent
-            yield entry
-
-
-def get_parent_reference_as_key(index_entry):
-    return index_entry["PARENT_REFERENCE"]["FileRecordNumber"], index_entry["PARENT_REFERENCE"]["SequenceNumber"]
+            yield INDEX_ENTRY.parse_stream(index_slack_stream, is_slack=True)
 
 
 def remove_allocated_space(index_record, record_header):
@@ -205,85 +197,37 @@ def remove_allocated_space(index_record, record_header):
     index_record[:0] = b"\x00" * TIMESTAMPS_OFFSET_IN_ENTRY
 
 
-def concat(first_entry, allocated_entries):
-    yield first_entry
-    yield from allocated_entries
-
-
-def get_all_entries_in_record(index_record, record_header, parent_reference, is_allocated):
-    allocated_entries = get_allocated_entries_in_record(index_record, record_header)
-
+def get_entries_in_record(index_record, record_header):
     try:
-        first_entry = next(allocated_entries)
-        record_belongs_to_parent = get_parent_reference_as_key(first_entry) == parent_reference
+        yield from get_allocated_entries_in_record(index_record, record_header)
 
-        for entry in concat(first_entry, allocated_entries):
-            entry["BelongsToParent"] = record_belongs_to_parent
-            yield entry
-
-    except StopIteration:
-        record_belongs_to_parent = is_allocated
+    except (StreamError, CheckError, OverflowError, UnicodeDecodeError):
+        return
 
     remove_allocated_space(index_record, record_header)
-    yield from get_slack_entries_in_record(index_record, record_belongs_to_parent)
+    yield from get_entries_in_slack(index_record)
 
 
-def get_all_entries_in_attribute(index_allocation_attribute, parent_reference, vbr):
-    is_allocated = index_allocation_attribute.is_allocated
-
-    for index_record, record_header in get_index_records(index_allocation_attribute, vbr):
+def get_index_records(index_allocation_attribute, vbr):
+    for index_record, record_header in get_raw_index_records(index_allocation_attribute, vbr):
         if is_valid_fixup(record_header):
-            yield from get_all_entries_in_record(index_record, record_header, parent_reference, is_allocated)
+            yield get_entries_in_record(index_record, record_header)
         else:
             warning("fixup validation failed for an index record. the entire record will be treated as slack space")
-            yield from get_slack_entries_in_record(index_record, False)
+            yield get_entries_in_slack(index_record)
 
 
-def get_all_entries(index_allocation_attributes, parent_reference, vbr):
-    for index_allocation_attribute in index_allocation_attributes:
-        yield from get_all_entries_in_attribute(index_allocation_attribute, parent_reference, vbr)
-
-
-def get_slack_entries_helper(index_allocation_attribute, allocated_entries, slack_entries, parent_reference, vbr):
-    for entry in get_all_entries_in_attribute(index_allocation_attribute, parent_reference, vbr):
-        if entry["IsSlack"]:
-            slack_entries.append(entry)
-        else:
-            entry_filename = entry["FilenameInUnicode"]
-            allocated_entries[entry_filename] = get_file_reference(entry)
-
-
-def get_file_reference(entry):
+def get_index_entry_file_reference(entry):
     return entry["FILE_REFERENCE"]["FileRecordNumber"], entry["FILE_REFERENCE"]["SequenceNumber"]
 
 
-def filter_slack_entries(allocated_entries, slack_entries):
-    for entry in slack_entries:
-        filename = entry["FilenameInUnicode"]
-
-        if filename in allocated_entries:
-            if not get_file_reference(entry) == allocated_entries[filename]:
-                yield entry
-
-        else:
-            yield entry
+def get_index_entry_parent_reference(entry):
+    return entry["PARENT_REFERENCE"]["FileRecordNumber"], entry["PARENT_REFERENCE"]["SequenceNumber"]
 
 
-def get_slack_entries(index_allocation_attributes, parent_reference, vbr):
-    alloc_entries, slack_entries = {}, []
-
-    for index_allocation_attribute in index_allocation_attributes:
-        if index_allocation_attribute.is_allocated:
-            get_slack_entries_helper(index_allocation_attribute, alloc_entries, slack_entries, parent_reference, vbr)
-
-        else:
-            yield from get_all_entries_in_attribute(index_allocation_attribute, parent_reference, vbr)
-
-    yield from filter_slack_entries(alloc_entries, slack_entries)
+def get_index_entry_filename(entry):
+    return entry["FilenameInUnicode"]
 
 
-def get_entries(index_allocation_attributes, parent_reference, slack_only, vbr):
-    if slack_only:
-        return get_slack_entries(index_allocation_attributes, parent_reference, vbr)
-    else:
-        return get_all_entries(index_allocation_attributes, parent_reference, vbr)
+def is_slack(entry):
+    return entry["IsSlack"]
