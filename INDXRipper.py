@@ -5,11 +5,9 @@
 """
 __version__ = "5.2.2"
 
-import os
-import random
 import argparse
 from contextlib import suppress
-from string import ascii_uppercase, ascii_lowercase
+
 
 from ntfs import parse_filename_attribute, get_resident_attribute, get_attribute_name, get_attribute_type
 from ntfs import get_boot_sector, get_mft_data_attribute, get_base_record_reference, is_base_record
@@ -20,7 +18,7 @@ from ntfs import get_mft_chunks, get_record_headers, apply_fixup, get_sequence_n
 from indx import get_index_records, is_slack, get_index_entry_parent_reference, get_index_entry_filename
 from indx import get_index_entry_file_reference
 
-from fmt import get_entry_output, get_format_header, warning
+from fmt import get_entry_output, get_format_header, warning, dedup
 
 
 class NoFilenameAttributeInRecordError(ValueError):
@@ -247,20 +245,6 @@ def get_output_lines(mft_dict, vbr, root_name, slack_only, output_format):
             yield from get_output_lines_helper(index_entries, output_format)
 
 
-def dedup(infile_path):
-    with open(infile_path, "rt", encoding="utf-8") as infile:
-        outfile_name = "".join(random.choices(ascii_uppercase + ascii_lowercase, k=6))
-        outfile_path = os.path.join(os.path.dirname(infile_path), outfile_name)
-
-        with open(outfile_path, "wt+", encoding="utf-8") as outfile:
-            with suppress(StopIteration):
-                outfile.write(next(infile))
-                outfile.writelines(set(infile))
-
-    os.remove(infile_path)
-    os.rename(outfile_path, infile_path)
-
-
 def main():
     args = get_arguments()
     with open(args.image, "rb") as raw_image:
@@ -269,11 +253,10 @@ def main():
         mft_dict = get_mft_dict(raw_image, mft_data, args.deleted_dirs, vbr)
 
         with open(args.outfile, "at+", encoding="utf-8") as outfile:
-            for lines in get_output_lines(mft_dict, vbr, args.m, args.slack_only, args.w):
-                outfile.writelines(lines)
+            outfile.writelines(get_output_lines(mft_dict, vbr, args.m, args.slack_only, args.w))
 
     if args.dedup:
-        dedup(args.outfile)
+        dedup(args.outfile, args.w)
 
 
 if __name__ == '__main__':
