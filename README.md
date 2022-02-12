@@ -79,17 +79,15 @@ This only happens for active directories, though.  In a deleted directory, all t
 
 ### The --deleted-dirs switch
 
-INDXRipper will not output entries in deleted directories by default. This can be changed using the --deleted-dirs switch. In this mode, files may be outputted with partial paths.
+A deleted directory may have some of its clusters overwritten, either by a file - or by another directory. This means the index records found in a deleted directory may actually belong to a different directory.
 
-#### $Orphan
+INDXRipper resolves the full path for the files in each index record separately, based on the parent file reference field of the first entry in the record. This means files should always be placed in their correct paths.
 
-Files and folders listed under **$Orphan** are deleted. Their parent folder is also deleted, and their full path cannot be resolved.
+#### Partial paths
 
-#### \<Unknown\>
+Some files and folders may be listed under **/$Orphan**. This means they are deleted, their parent folder is also deleted, and their full path could not be resolved.
 
-A deleted directory may have some of its clusters overwritten by another directory. This means the index records found in a deleted directory may actually belong to a different directory.
-
-A file listed under **\<Unknown\>** may or may not be deleted. Its entry was found in a deleted directory, but INDXRipper could not tell if this deleted directory is indeed this file's parent directory. 
+If a file is listed under **\<Unknown\>**, on the other hand, it doesn't mean it's deleted. The entry was found in a deleted directory, and INDXRipper could not determine its parent directory. 
 
 ## Limitations
 * The tool may give false results.
