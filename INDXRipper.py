@@ -5,8 +5,11 @@
 """
 __version__ = "5.2.2"
 
+import os
+import random
 import argparse
 from contextlib import suppress
+from string import ascii_uppercase, ascii_lowercase
 
 from ntfs import parse_filename_attribute, get_resident_attribute, get_attribute_name, get_attribute_type
 from ntfs import get_boot_sector, get_mft_data_attribute, get_base_record_reference, is_base_record
@@ -14,8 +17,9 @@ from ntfs import is_valid_fixup, is_valid_record_signature, get_attribute_header
 from ntfs import EmptyNonResidentAttributeError, get_non_resident_attribute, is_directory
 from ntfs import get_mft_chunks, get_record_headers, apply_fixup, get_sequence_number
 
-from indx import get_index_records, is_slack, get_index_entry_parent_reference, get_index_entry_filename, \
-    get_index_entry_file_reference
+from indx import get_index_records, is_slack, get_index_entry_parent_reference, get_index_entry_filename
+from indx import get_index_entry_file_reference
+
 from fmt import get_entry_output, get_format_header, warning
 
 
@@ -157,11 +161,10 @@ def get_parent_path(first_entry, mft_dict, key, root_name, is_allocated):
         parent_key = get_index_entry_parent_reference(first_entry)
         return get_path(mft_dict, parent_key, root_name)
 
-    else:
-        if is_allocated:
-            return get_path(mft_dict, key, root_name)
-        else:
-            return "<Unknown>"
+    elif is_allocated:
+        return get_path(mft_dict, key, root_name)
+
+    return "<Unknown>"
 
 
 def get_index_entries_in_attribute_helper(first_entry, index_record, parent_path):
@@ -230,30 +233,32 @@ def get_index_entries(index_attributes, vbr, mft_dict, key, root_name, slack_onl
         yield from get_all_index_entries(index_attributes, vbr, mft_dict, key, root_name)
 
 
-def get_collection(dedup):
-    if dedup:
-        return set(), set.add
-    else:
-        return list(), list.append
-
-
-def get_output_lines_helper(index_entries, dedup, output_format):
-    lines, add_line = get_collection(dedup)
-
+def get_output_lines_helper(index_entries, output_format):
     for index_entry in index_entries:
-        line = get_entry_output(index_entry, output_format)
-        add_line(lines, line)
-
-    return lines
+        yield get_entry_output(index_entry, output_format)
 
 
-def get_output_lines(mft_dict, vbr, root_name, slack_only, dedup, output_format):
-    yield [get_format_header(output_format)]
+def get_output_lines(mft_dict, vbr, root_name, slack_only, output_format):
+    yield get_format_header(output_format)
 
     for key in mft_dict:
         if index_attributes := mft_dict[key]["$INDEX_ALLOCATION"]:
             index_entries = get_index_entries(index_attributes, vbr, mft_dict, key, root_name, slack_only)
-            yield get_output_lines_helper(index_entries, dedup, output_format)
+            yield from get_output_lines_helper(index_entries, output_format)
+
+
+def dedup(infile_path):
+    with open(infile_path, "rt", encoding="utf-8") as infile:
+        outfile_name = "".join(random.choices(ascii_uppercase + ascii_lowercase, k=6))
+        outfile_path = os.path.join(os.path.dirname(infile_path), outfile_name)
+
+        with open(outfile_path, "wt+", encoding="utf-8") as outfile:
+            with suppress(StopIteration):
+                outfile.write(next(infile))
+                outfile.writelines(set(infile))
+
+    os.remove(infile_path)
+    os.rename(outfile_path, infile_path)
 
 
 def main():
@@ -264,8 +269,11 @@ def main():
         mft_dict = get_mft_dict(raw_image, mft_data, args.deleted_dirs, vbr)
 
         with open(args.outfile, "at+", encoding="utf-8") as outfile:
-            for lines in get_output_lines(mft_dict, vbr, args.m, args.slack_only, args.dedup, args.w):
+            for lines in get_output_lines(mft_dict, vbr, args.m, args.slack_only, args.w):
                 outfile.writelines(lines)
+
+    if args.dedup:
+        dedup(args.outfile)
 
 
 if __name__ == '__main__':
