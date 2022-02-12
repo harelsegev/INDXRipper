@@ -5,12 +5,9 @@
 """
 
 import os
-import random
+import tempfile
 from sys import stderr
-from contextlib import suppress
-from sys import exit as sys_exit
 from datetime import timezone, datetime
-from string import ascii_uppercase, ascii_lowercase
 
 
 def to_epoch(timestamp: datetime):
@@ -122,30 +119,29 @@ def warning(message):
     eprint(f"INDXRipper: warning: {message}")
 
 
-def get_temp_file_path(outfile):
-    filename = "".join(random.choices(ascii_uppercase + ascii_lowercase, k=6))
-    return os.path.join(os.path.dirname(outfile), filename)
+def write_dedup_output_lines(output_lines, outfile, output_format):
+    tempdir = os.path.dirname(outfile)
+
+    with tempfile.TemporaryFile(mode="rt+", dir=tempdir, encoding="utf-8") as tmp:
+        tmp.writelines(output_lines)
+
+        tmp.seek(0)
+        with open(outfile, "at+", encoding="utf-8") as out:
+            tmp_iter = iter(tmp)
+
+            if get_format_header(output_format):
+                out.writelines(next(tmp_iter))
+
+            out.writelines(set(tmp_iter))
 
 
-def write_temp_file(temp_file, outfile, output_format):
-    if get_format_header(output_format):
-        with suppress(StopIteration):
-            header = next(outfile)
-            temp_file.write(header)
-
-    temp_file.writelines(set(outfile))
+def write_all_output_lines(output_lines, outfile):
+    with open(outfile, "at+", encoding="utf-8") as out:
+        out.writelines(output_lines)
 
 
-def replace(outfile, temp_file):
-    os.remove(outfile)
-    os.rename(temp_file, outfile)
-
-
-def dedup(outfile, output_format):
-    with open(outfile, "rt", encoding="utf-8") as out:
-        temp_file = get_temp_file_path(outfile)
-
-        with open(temp_file, "wt+", encoding="utf-8") as temp:
-            write_temp_file(temp, out, output_format)
-
-    replace(outfile, temp_file)
+def write_output_lines(output_lines, outfile, dedup, output_format):
+    if dedup:
+        write_dedup_output_lines(output_lines, outfile, output_format)
+    else:
+        write_all_output_lines(output_lines, outfile)

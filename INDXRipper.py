@@ -18,7 +18,7 @@ from ntfs import get_mft_chunks, get_record_headers, apply_fixup, get_sequence_n
 from indx import get_index_records, is_slack, get_index_entry_parent_reference, get_index_entry_filename
 from indx import get_index_entry_file_reference
 
-from fmt import get_entry_output, get_format_header, warning, dedup
+from fmt import get_entry_output, get_format_header, warning, write_output_lines
 
 
 class NoFilenameAttributeInRecordError(ValueError):
@@ -252,11 +252,8 @@ def main():
         mft_data = get_mft_data_attribute(vbr, raw_image)
         mft_dict = get_mft_dict(raw_image, mft_data, args.deleted_dirs, vbr)
 
-        with open(args.outfile, "at+", encoding="utf-8") as outfile:
-            outfile.writelines(get_output_lines(mft_dict, vbr, args.m, args.slack_only, args.w))
-
-    if args.dedup:
-        dedup(args.outfile, args.w)
+        output_lines = get_output_lines(mft_dict, vbr, args.m, args.slack_only, args.w)
+        write_output_lines(output_lines, args.outfile, args.dedup, args.w)
 
 
 if __name__ == '__main__':
