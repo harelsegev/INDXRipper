@@ -40,7 +40,7 @@ def get_arguments():
     parser.add_argument("-w", choices=["csv", "bodyfile"], default="csv", help="output format. default is csv")
 
     parser.add_argument("--deleted-dirs", action="store_true", help="display entries in deleted directories")
-    parser.add_argument("--slack-only", action="store_true", help="only display entries in slack space")
+    parser.add_argument("--slack-only", action="store_true", help="filter out entries of allocated files")
     parser.add_argument("--dedup", action="store_true", help="deduplicate output lines")
     return parser.parse_args()
 

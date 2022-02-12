@@ -69,6 +69,8 @@ Note that the bodyfile format is specific to the sleuthkit and is not fully docu
 
 ### The --slack-only switch
 
+The name of this switch is really not that great. For allocated directories, not all the entries in slack space are outputted in this mode. Moreover, if you combine it with the --deleted-dirs switch, you may find allocated entries in your output!
+
 A lot of the entries in slack space are old entries of active files. Those old entries contain a "snapshot" of the file's metadata from an earlier point in time. Although this information may be useful in some cases, most of the time it is not necessary to answer my investigative questions.
 
 In --slack-only mode, **some** of those entries are filtered out, to prevent information overflow in your timeline. The filtering is done as follows:
