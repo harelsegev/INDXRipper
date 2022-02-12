@@ -102,7 +102,9 @@ def get_mft_dict(raw_image, mft_data, deleted_dirs, vbr):
 
     for index, sequence, mft_chunk, record_header in get_mft_records(mft_data, vbr):
         if is_directory(record_header):
-            if is_allocated := is_used(record_header) or deleted_dirs:
+            is_allocated = is_used(record_header)
+
+            if is_allocated or deleted_dirs:
                 values = get_mft_dict_values(vbr, raw_image, mft_chunk, record_header, is_allocated)
 
                 if is_base_record(record_header):
