@@ -21,8 +21,8 @@ def to_iso(timestamp: datetime):
 COMMON_FIELDS = {
     "full_path": lambda index_entry: index_entry["ParentPath"] + "/" + index_entry["FilenameInUnicode"],
 
-    "index": lambda index_entry: index_entry["FILE_REFERENCE"]["FileRecordNumber"],
-    "sequence": lambda index_entry: index_entry["FILE_REFERENCE"]["SequenceNumber"],
+    "index": lambda index_entry: index_entry["FileReference"]["FileRecordNumber"],
+    "sequence": lambda index_entry: index_entry["FileReference"]["SequenceNumber"],
 
     "size": lambda index_entry: index_entry["RealSize"],
     "alloc_size": lambda index_entry: index_entry["AllocatedSize"],

@@ -42,7 +42,7 @@ Filetime = FiletimeAdapter(Int64ul)
 
 
 INDEX_ENTRY = Struct(
-    "FILE_REFERENCE" / FILE_REFERENCE,
+    "FileReference" / FILE_REFERENCE,
     "EntrySize" / Int16ul,
     Padding(2),
 
@@ -50,7 +50,7 @@ INDEX_ENTRY = Struct(
     StopIf(lambda this: this.EntryFlags["LAST_ENTRY"] and not this._.is_slack),
 
     Padding(3),
-    "PARENT_REFERENCE" / FILE_REFERENCE,
+    "ParentDirectoryReference" / FILE_REFERENCE,
     "CreationTime" / Filetime,
     "LastModificationTime" / Filetime,
     "LastMftChangeTime" / Filetime,
@@ -78,11 +78,10 @@ INDEX_ENTRY = Struct(
     Padding(4),
 
     "FilenameLengthInCharacters" / Int8ul,
-
     "FilenameNamespace" / Enum(Int8ul, POSIX=0, WIN32=1, DOS=2, WIN32_DOS=3),
     "FilenameInUnicode" / PaddedString(lambda this: this.FilenameLengthInCharacters * 2, "utf16"),
-    Check(lambda this: not this._.is_slack or this.FilenameInUnicode.isprintable()),
 
+    Check(lambda this: not this._.is_slack or this.FilenameInUnicode.isprintable()),
     "IsSlack" / Computed(lambda this: this._.is_slack)
 )
 
@@ -198,14 +197,10 @@ def remove_allocated_space(index_record, record_header):
 
 
 def get_entries_in_record(index_record, record_header):
-    try:
+    with suppress(StreamError, CheckError, OverflowError, UnicodeDecodeError):
         yield from get_allocated_entries_in_record(index_record, record_header)
-
-    except (StreamError, CheckError, OverflowError, UnicodeDecodeError):
-        return
-
-    remove_allocated_space(index_record, record_header)
-    yield from get_entries_in_slack(index_record)
+        remove_allocated_space(index_record, record_header)
+        yield from get_entries_in_slack(index_record)
 
 
 def get_index_records(index_allocation_attribute, vbr):
@@ -218,11 +213,11 @@ def get_index_records(index_allocation_attribute, vbr):
 
 
 def get_index_entry_file_reference(entry):
-    return entry["FILE_REFERENCE"]["FileRecordNumber"], entry["FILE_REFERENCE"]["SequenceNumber"]
+    return entry["FileReference"]["FileRecordNumber"], entry["FileReference"]["SequenceNumber"]
 
 
 def get_index_entry_parent_reference(entry):
-    return entry["PARENT_REFERENCE"]["FileRecordNumber"], entry["PARENT_REFERENCE"]["SequenceNumber"]
+    return entry["ParentDirectoryReference"]["FileRecordNumber"], entry["ParentDirectoryReference"]["SequenceNumber"]
 
 
 def get_index_entry_filename(entry):

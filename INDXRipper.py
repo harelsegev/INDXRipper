@@ -157,12 +157,12 @@ def get_path(mft_dict, key, mount_point):
 
 
 def get_parent_path(first_entry, mft_dict, key, root_name, is_allocated):
-    if not is_slack(first_entry):
+    if is_allocated:
+        return get_path(mft_dict, key, root_name)
+
+    elif not is_slack(first_entry):
         parent_key = get_index_entry_parent_reference(first_entry)
         return get_path(mft_dict, parent_key, root_name)
-
-    elif is_allocated:
-        return get_path(mft_dict, key, root_name)
 
     return "<Unknown>"
 
@@ -203,7 +203,7 @@ def get_slack_entries_helper(index_attribute, allocated_entries, slack_entries, 
 
 def filter_slack_entries(allocated_entries, slack_entries):
     for entry in slack_entries:
-        filename = entry["FilenameInUnicode"]
+        filename = get_index_entry_filename(entry)
 
         if filename in allocated_entries:
             if not get_index_entry_file_reference(entry) == allocated_entries[filename]:
