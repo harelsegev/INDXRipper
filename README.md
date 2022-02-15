@@ -69,7 +69,7 @@ Note that the bodyfile format is specific to the sleuthkit and is not fully docu
 
 ### The --slack-only switch
 
-The name of this switch is really not that great. For allocated directories, not all the entries in slack space are outputted in this mode. Moreover, if you combine it with the --deleted-dirs switch, you may find allocated entries in your output!
+Not all the entries in slack space are outputted in this mode.
 
 A lot of the entries in slack space are old entries of active files. Those old entries contain a "snapshot" of the file's metadata from an earlier point in time. Although this information may be useful in some cases, most of the time it is not necessary to answer my investigative questions.
 
@@ -83,7 +83,7 @@ This only happens for active directories, though.  In a deleted directory, all t
 
 A deleted directory may have some of its clusters overwritten, either by a file - or by another directory. This means the index records found in a deleted directory may actually belong to a different directory.
 
-INDXRipper resolves the full path for the files in each index record separately, based on the parent file reference field of the first entry in the record. This means files should always be placed in their correct paths.
+In a deleted directory, INDXRipper resolves the full path for the files in each index record separately, based on the parent file reference field of the first entry in the record. This means files should always be placed in their correct paths.
 
 #### Partial paths
 
