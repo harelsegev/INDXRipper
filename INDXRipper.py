@@ -156,35 +156,41 @@ def get_path(mft_dict, key, mount_point):
     return mount_point + get_path_helper(mft_dict, key)
 
 
-def get_parent_path(first_entry, mft_dict, key, root_name, is_allocated):
-    if is_allocated:
-        return get_path(mft_dict, key, root_name)
-
-    elif not is_slack(first_entry):
+def get_parent_path(first_entry, mft_dict, root_name):
+    if not is_slack(first_entry):
         parent_key = get_index_entry_parent_reference(first_entry)
         return get_path(mft_dict, parent_key, root_name)
 
     return "<Unknown>"
 
 
-def get_index_entries_in_attribute_helper(first_entry, index_record, parent_path):
-    first_entry["ParentPath"] = parent_path
-    yield first_entry
-
-    for entry in index_record:
-        entry["ParentPath"] = parent_path
-        yield entry
+def get_index_entries_in_record(index_record, parent_path):
+    for index_entry in index_record:
+        index_entry["ParentPath"] = parent_path
+        yield index_entry
 
 
-def get_index_entries_in_attribute(index_attribute, vbr, mft_dict, key, root_name):
-    is_allocated = index_attribute.is_allocated
-
+def get_index_entries_in_deleted_attribute(index_attribute, vbr, mft_dict, root_name):
     for index_record in get_index_records(index_attribute, vbr):
         with suppress(StopIteration):
             first_entry = next(index_record)
-            parent_path = get_parent_path(first_entry, mft_dict, key, root_name, is_allocated)
+            first_entry["ParentPath"] = get_parent_path(first_entry, mft_dict, root_name)
+            yield first_entry
 
-            yield from get_index_entries_in_attribute_helper(first_entry, index_record, parent_path)
+            yield from get_index_entries_in_record(index_record, first_entry["ParentPath"])
+
+
+def get_index_entries_in_allocated_attribute(index_attribute, vbr, mft_dict, key, root_name):
+    parent_path = get_path(mft_dict, key, root_name)
+    for index_record in get_index_records(index_attribute, vbr):
+        yield from get_index_entries_in_record(index_record, parent_path)
+
+
+def get_index_entries_in_attribute(index_attribute, vbr, mft_dict, key, root_name):
+    if index_attribute.is_allocated:
+        yield from get_index_entries_in_allocated_attribute(index_attribute, vbr, mft_dict, key, root_name)
+    else:
+        yield from get_index_entries_in_deleted_attribute(index_attribute, vbr, mft_dict, root_name)
 
 
 def get_all_index_entries(index_attributes, vbr, mft_dict, key, root_name):
