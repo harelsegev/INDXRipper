@@ -3,7 +3,7 @@
     Author: Harel Segev
     05/16/2021
 """
-__version__ = "5.2.3"
+__version__ = "5.2.4"
 
 import argparse
 from contextlib import suppress
@@ -33,13 +33,13 @@ def get_arguments():
     parser.add_argument("-V", "--version", action='version', version=f"%(prog)s {__version__}")
 
     parser.add_argument("-m", metavar="MOUNT_POINT", default="",
-                        help="a name to display as the mount point of the image, e.g. C:")
+                        help="a name to display as the mount point of the image")
 
     parser.add_argument("-o", metavar="OFFSET", type=int, default=0, help="offset to an NTFS partition (in sectors)")
     parser.add_argument("-b", metavar="SECTOR_SIZE", type=int, default=512, help="sector size in bytes. default is 512")
     parser.add_argument("-w", choices=["csv", "bodyfile"], default="csv", help="output format. default is csv")
 
-    parser.add_argument("--deleted-dirs", action="store_true", help="display entries in deleted directories")
+    parser.add_argument("--deleted-dirs", action="store_true", help="find entries in deleted directories")
     parser.add_argument("--slack-only", action="store_true", help="filter out entries of allocated files")
     parser.add_argument("--dedup", action="store_true", help="deduplicate output lines")
     return parser.parse_args()
