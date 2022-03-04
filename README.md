@@ -8,13 +8,15 @@ See: [sleuthkit](https://github.com/sleuthkit/sleuthkit)
 
 ## Motivation
 
-In NTFS, $INDEX_ALLOCATION attributes are used to keep track of the files in a folder. A folder's $INDEX_ALLOCATION attribute contains an entry for every file in that folder. These entries are called index entries, and they contain some of the file's metadata:
+In NTFS, $INDEX_ALLOCATION attributes are used to keep track of the files in a folder. A folder's $INDEX_ALLOCATION attribute contains an entry for every file in that folder. Those entries are called index entries, and they contain some of the file's metadata:
 * File name
 * File size
 * Allocated size of file (size on disk)
 * A set of MACB timestamps
 
-$INDEX_ALLOCATION attributes often contain a significant amount of slack space, which may contain index entries of deleted files. A file's index entry may last long after the file's MFT record is lost. Finding these index entries may help you prove a file existed on a system.
+$INDEX_ALLOCATION attributes often contain a significant amount of slack space, which may contain index entries of deleted files. A file's index entry may last long after its MFT record is lost. Finding these index entries may help you prove a file existed on a system.
+
+For a more detailed explanation of this artifact, watch this 13Cubed episode: https://www.youtube.com/watch?v=x-M-wyq3BXA
 
 ## Installation
 
@@ -75,7 +77,7 @@ A lot of the entries in slack space are old entries of active files. Those old e
 
 In --slack-only mode, **some** of those entries are filtered out, to prevent information overflow in your timeline. The filtering is done as follows:
 
-For every entry in slack space, INDXRipper scans the directory for an allocated entry with the same file name. If such entry is found, INDXRipper compares the file references in the two entries. If they match, the slack entry is not outputted. In any other case, the slack entry is outputted.
+For every entry in slack space, INDXRipper scans the directory for an allocated entry with the same file name. If such entry is found, INDXRipper compares the file references in the two entries. If they match, the slack entry is not outputted.
 
 This only happens for active directories, though.  In a deleted directory, all the entries found will be outputted - including allocated ones.
 
@@ -89,7 +91,7 @@ In a deleted directory, INDXRipper resolves the full path for the files in each 
 
 Some files and folders may be listed under **/$Orphan**. This means they are deleted, their parent folder is also deleted, and their full path could not be resolved.
 
-If a file is listed under **\<Unknown\>**, on the other hand, it doesn't mean it's deleted. The entry was found in a deleted directory, and INDXRipper could not determine its parent directory. 
+Files listed under **\<Unknown\>**, on the other hand, are not necessarily deleted. Those entries were found in a deleted directory, and INDXRipper could not determine their parent directory. 
 
 ## Limitations
 * The tool may give false results.

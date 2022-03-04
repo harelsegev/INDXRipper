@@ -174,10 +174,12 @@ def get_index_entries_in_deleted_attribute(index_attribute, vbr, mft_dict, root_
     for index_record in get_index_records(index_attribute, vbr):
         with suppress(StopIteration):
             first_entry = next(index_record)
-            first_entry["ParentPath"] = get_parent_path(first_entry, mft_dict, root_name)
+            parent_path = get_parent_path(first_entry, mft_dict, root_name)
+
+            first_entry["ParentPath"] = parent_path
             yield first_entry
 
-            yield from get_index_entries_in_record(index_record, first_entry["ParentPath"])
+            yield from get_index_entries_in_record(index_record, parent_path)
 
 
 def get_index_entries_in_allocated_attribute(index_attribute, vbr, mft_dict, key, root_name):
