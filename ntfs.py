@@ -23,7 +23,14 @@ BOOT_SECTOR = Struct(
     StopIf(lambda this: this.Magic is None),
     Padding(4),
     "BytsPerSec" / Int16ul,
-    "SecPerClus" / Int8ul,
+
+    "SecPerClusRaw" / Int8ul,
+    "SecPerClus" / IfThenElse(
+        lambda this: 244 <= this.SecPerClusRaw <= 255,
+        Computed(lambda this: 2 ** (256 - this.SecPerClusRaw)),
+        Computed(lambda this: this.SecPerClusRaw)
+    ),
+
     "BytsPerClus" / Computed(lambda this: this.BytsPerSec * this.SecPerClus),
 
     Padding(34),
