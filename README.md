@@ -31,6 +31,9 @@ Alternatively, you can use the Windows packaged release.
 ## Usage Examples
 
 ```bash
+# process an image mounted and mapped as J: drive (Windows version)
+INDXRipper.exe \\.\J: outfile.csv
+
 # process the partition in sector 1026048, allocated directories only
 python INDXRipper.py -o 1026048 raw_disk.dd output.csv
 
