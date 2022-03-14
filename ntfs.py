@@ -79,6 +79,8 @@ FILE_RECORD_HEADER = Struct(
     "Flags" / FlagsEnum(Int16ul, IN_USE=1, DIRECTORY=2),
     Padding(8),
     "BaseRecordReference" / FILE_REFERENCE,
+    Padding(4),
+    "ThisRecordIndex" / Int32ul,
 
     Seek(lambda this: this.UpdateSequenceOffset + this.OffsetInChunk),
     "UpdateSequenceNumber" / Int16ul,
@@ -211,6 +213,10 @@ def get_sequence_number(record_header):
         return record_header["SequenceNumber"] - 1
 
 
+def get_mft_index(record_header):
+    return record_header["ThisRecordIndex"]
+
+
 def is_base_record(record_header):
     return record_header["BaseRecordReference"]["FileRecordNumber"] == 0
 
@@ -271,7 +277,7 @@ def panic_on_invalid_first_record(record_header):
         sys_exit(f"INDXRipper: error: fixup validation failed for first file record")
 
 
-def get_mft_data_attribute(vbr, raw_image):
+def get_first_mft_data_attribute(vbr, raw_image):
     panic_on_invalid_boot_sector(vbr)
     mft_chunk = get_first_mft_chunk(vbr, raw_image)
     record_headers = get_record_headers(mft_chunk, vbr)

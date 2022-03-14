@@ -10,10 +10,11 @@ from contextlib import suppress
 
 
 from ntfs import parse_filename_attribute, get_resident_attribute, get_attribute_name, get_attribute_type
-from ntfs import get_boot_sector, get_mft_data_attribute, get_base_record_reference, is_base_record
+from ntfs import get_boot_sector, get_first_mft_data_attribute, get_base_record_reference, is_base_record
 from ntfs import is_valid_fixup, is_valid_record_signature, get_attribute_headers, is_used
 from ntfs import EmptyNonResidentAttributeError, get_non_resident_attribute, is_directory
 from ntfs import get_mft_chunks, get_record_headers, apply_fixup, get_sequence_number
+from ntfs import get_attribute_header, get_mft_index
 
 from indx import get_index_records, is_slack, get_index_entry_parent_reference, get_index_entry_filename
 from indx import get_index_entry_file_reference
@@ -73,23 +74,22 @@ def get_mft_dict_values(vbr, raw_image, mft_chunk, record_header, is_allocated):
     return values
 
 
-def get_mft_records(mft_data, vbr):
-    current_record = -1
-    for mft_chunk in get_mft_chunks(vbr, mft_data):
+def get_mft_records(mft_data_attribute, vbr):
+    for mft_chunk in get_mft_chunks(vbr, mft_data_attribute):
         record_headers = get_record_headers(mft_chunk, vbr)
         apply_fixup(mft_chunk, record_headers, vbr)
 
         for record_header in record_headers:
-            current_record += 1
             if is_valid_record_signature(record_header):
                 if not is_valid_fixup(record_header):
-                    warning(f"fixup validation failed for file record at index {current_record}. ignoring this record")
+                    record_index = get_mft_index(record_header)
+                    warning(f"fixup validation failed for file record at index {record_index}. ignoring this record")
                     continue
 
-                yield current_record, get_sequence_number(record_header), mft_chunk, record_header
+                yield mft_chunk, record_header
 
 
-def add_to_mft_dict(mft_dict, key, values):
+def add_values_to_mft_dict(mft_dict, key, values):
     if key not in mft_dict:
         mft_dict[key] = values
     else:
@@ -97,21 +97,56 @@ def add_to_mft_dict(mft_dict, key, values):
         mft_dict[key]["$FILE_NAME"] += values["$FILE_NAME"]
 
 
-def get_mft_dict(raw_image, mft_data, deleted_dirs, vbr):
-    mft_dict = dict()
+def add_to_mft_dict(mft_dict, mft_chunk, record_header, deleted_dirs, raw_image, vbr):
+    if is_directory(record_header):
+        is_allocated = is_used(record_header)
 
-    for index, sequence, mft_chunk, record_header in get_mft_records(mft_data, vbr):
-        if is_directory(record_header):
-            is_allocated = is_used(record_header)
+        if is_allocated or deleted_dirs:
+            values = get_mft_dict_values(vbr, raw_image, mft_chunk, record_header, is_allocated)
 
-            if is_allocated or deleted_dirs:
-                values = get_mft_dict_values(vbr, raw_image, mft_chunk, record_header, is_allocated)
+            if is_base_record(record_header):
+                index = get_mft_index(record_header)
+                sequence = get_sequence_number(record_header)
 
-                if is_base_record(record_header):
-                    add_to_mft_dict(mft_dict, (index, sequence), values)
-                else:
-                    base_reference = get_base_record_reference(record_header)
-                    add_to_mft_dict(mft_dict, base_reference, values)
+                add_values_to_mft_dict(mft_dict, (index, sequence), values)
+            else:
+                base_reference = get_base_record_reference(record_header)
+                add_values_to_mft_dict(mft_dict, base_reference, values)
+
+
+def add_to_extra_mft_data_attributes(mft_chunk, record_header, extra_mft_data_attributes, raw_image, vbr):
+    if is_used(record_header):
+        attribute_headers = get_attribute_headers(mft_chunk, record_header)
+
+        with suppress(StopIteration):
+            data_attribute_header = next(get_attribute_header(attribute_headers, "DATA"))
+            data_attribute = get_non_resident_attribute(vbr, raw_image, mft_chunk, data_attribute_header, True)
+
+            extra_mft_data_attributes.append(data_attribute)
+
+
+def populate_mft_dict(mft_dict, raw_image, mft_data_attribute, deleted_dirs, vbr):
+    extra_mft_data_attributes = []
+
+    for mft_chunk, record_header in get_mft_records(mft_data_attribute, vbr):
+        if get_base_record_reference(record_header) == (0, 1):
+            add_to_extra_mft_data_attributes(mft_chunk, record_header, extra_mft_data_attributes, raw_image, vbr)
+        else:
+            add_to_mft_dict(mft_dict, mft_chunk, record_header, deleted_dirs, raw_image, vbr)
+
+    return extra_mft_data_attributes
+
+
+def get_mft_dict_helper(mft_dict, raw_image, mft_data_attribute, deleted_dirs, vbr):
+    extra_mft_data_attributes = populate_mft_dict(mft_dict, raw_image, mft_data_attribute, deleted_dirs, vbr)
+
+    for extra_mft_data_attribute in extra_mft_data_attributes:
+        get_mft_dict_helper(mft_dict, raw_image, extra_mft_data_attribute, deleted_dirs, vbr)
+
+
+def get_mft_dict(raw_image, first_mft_data_attribute, deleted_dirs, vbr):
+    mft_dict = {}
+    get_mft_dict_helper(mft_dict, raw_image, first_mft_data_attribute, deleted_dirs, vbr)
 
     return mft_dict
 
@@ -259,8 +294,8 @@ def main():
     args = get_arguments()
     with open(args.image, "rb") as raw_image:
         vbr = get_boot_sector(raw_image, args.o * args.b)
-        mft_data = get_mft_data_attribute(vbr, raw_image)
-        mft_dict = get_mft_dict(raw_image, mft_data, args.deleted_dirs, vbr)
+        first_mft_data_attribute = get_first_mft_data_attribute(vbr, raw_image)
+        mft_dict = get_mft_dict(raw_image, first_mft_data_attribute, args.deleted_dirs, vbr)
 
         output_lines = get_output_lines(mft_dict, vbr, args.m, args.slack_only, args.w)
         write_output_lines(output_lines, args.outfile, args.dedup, args.w)

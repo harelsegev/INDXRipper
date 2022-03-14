@@ -8,7 +8,7 @@ See: [sleuthkit](https://github.com/sleuthkit/sleuthkit)
 
 ## Motivation
 
-In NTFS, $INDEX_ALLOCATION attributes are used to keep track of the files in a folder. A folder's $INDEX_ALLOCATION attribute contains an entry for every file in that folder. Those entries are called index entries, and they contain some of the file's metadata:
+In NTFS, $INDEX_ALLOCATION attributes are used to keep track of which files are in which folders. A folder's $INDEX_ALLOCATION attribute contains an entry for every file in that folder. Those entries are called index entries, and they contain some of the file's metadata:
 * File name
 * File size
 * Allocated size of file (size on disk)
@@ -88,18 +88,18 @@ This only happens for active directories, though.  In a deleted directory, all t
 
 A deleted directory may have some of its clusters overwritten, either by a file - or by another directory. This means the index records found in a deleted directory may actually belong to a different directory.
 
-In a deleted directory, INDXRipper resolves the full path for the files in each index record separately, based on the parent file reference field of the first entry in the record. This means files should always be placed in their correct paths.
+In a deleted directory, INDXRipper resolves the full path for the files in each index record separately, based on the parent file reference field of the first entry in the record. This means files should always be placed in their correct path. If the same index record is found in different directories, the index entries in the record will be outputted multiple times.
 
 #### Partial paths
 
 Some files and folders may be listed under **/$Orphan**. This means they are deleted, their parent folder is also deleted, and their full path could not be resolved.
 
-Files listed under **\<Unknown\>**, on the other hand, are not necessarily deleted. Those entries were found in a deleted directory, and INDXRipper could not determine their parent directory. 
+Files listed under **\<Unknown\>**, on the other hand - are not necessarily deleted. Those entries were found in a deleted directory, and INDXRipper could not determine their parent directory. 
 
 ## Limitations
 * The tool may give false results.
 * Partially overwritten entries may not be found. If they are found, though, the tool may give you false information.
-* The tool currently supports NTFS version 3.1 only
+* The tool supports NTFS version 3.1 only
 
 ### What this tool doesn't do
 * This tool doesn't process $INDEX_ROOT attributes.
