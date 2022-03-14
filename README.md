@@ -16,7 +16,8 @@ In NTFS, $INDEX_ALLOCATION attributes are used to keep track of which files are 
 
 $INDEX_ALLOCATION attributes often contain a significant amount of slack space, which may contain index entries of deleted files. A file's index entry may last long after its MFT record is lost. Finding these index entries may help you prove a file existed on a system.
 
-For a more detailed explanation of this artifact, watch this 13Cubed episode: https://www.youtube.com/watch?v=x-M-wyq3BXA
+For a more detailed explanation of this artifact, watch this 13Cubed episode:  
+https://www.youtube.com/watch?v=x-M-wyq3BXA
 
 ## Installation
 
