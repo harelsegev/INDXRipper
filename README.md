@@ -8,7 +8,7 @@ See: [sleuthkit](https://github.com/sleuthkit/sleuthkit)
 
 ## Motivation
 
-In NTFS, $INDEX_ALLOCATION attributes are used to keep track of which files are in which folders. A folder's $INDEX_ALLOCATION attribute contains an entry for every file in that folder. Those entries are called index entries, and they contain some of the file's metadata:
+In NTFS, $INDEX_ALLOCATION attributes are used to keep track of which files are in which folder. A folder's $INDEX_ALLOCATION attribute contains an entry for every file in that folder. Those entries are called index entries, and they contain some of the file's metadata:
 * File name
 * File size
 * Allocated size of file (size on disk)
@@ -69,7 +69,7 @@ Note that the bodyfile format is specific to the sleuthkit and is not fully docu
 ### Basic features
 * Applies fixups for index records and MFT records
 * Handles $INDEX_ALLOCATION and $FILE_NAME attributes in extension records
-* Full paths are reconstructed using the parent directory references from the MFT records.
+* Full paths are resolved using the parent directory references from the MFT records.
 * Works on live Windows NTFS drives, using device paths
 * All times outputted are in UTC
 
@@ -77,7 +77,7 @@ Note that the bodyfile format is specific to the sleuthkit and is not fully docu
 
 Not all the entries in slack space are outputted in this mode.
 
-A lot of the entries in slack space are old entries of active files. Those old entries contain a "snapshot" of the file's metadata from an earlier point in time. Although this information may be useful in some cases, most of the time it is not necessary to answer my investigative questions.
+A lot of the entries in slack space are old entries of active files. Those old entries contain a "snapshot" of the file's metadata from an earlier point in time. Although this information may be useful in some cases, most of the time it's the deleted files I'm interested in.
 
 In --slack-only mode, **some** of those entries are filtered out, to prevent information overflow in your timeline. The filtering is done as follows:
 
@@ -87,9 +87,9 @@ This only happens for active directories, though.  In a deleted directory, all t
 
 ### The --deleted-dirs switch
 
-A deleted directory may have some of its clusters overwritten, either by a file - or by another directory. This means the index records found in a deleted directory may actually belong to a different directory.
+A deleted directory may have some of its clusters overwritten - either by a file, or by another directory. This means the index records found in a deleted directory may be partially overwritten, or may actually belong to a different directory.
 
-In a deleted directory, INDXRipper resolves the full path for the files in each index record separately, based on the parent file reference field of the first entry in the record. This means files should always be placed in their correct path. If the same index record is found in different directories, the index entries in the record will be outputted multiple times.
+In a deleted directory, INDXRipper resolves the full path for the files in each index record separately, based on the parent file reference field of the first entry in the record. This means files should be placed in their correct path.
 
 #### Partial paths
 
@@ -98,7 +98,7 @@ Some files and folders may be listed under **/$Orphan**. This means they are del
 Files listed under **\<Unknown\>**, on the other hand - are not necessarily deleted. Those entries were found in a deleted directory, and INDXRipper could not determine their parent directory. 
 
 ## Limitations
-* The tool may give false results.
+* The tool may give false results. While false positives are rare, they are possible.
 * Partially overwritten entries may not be found. If they are found, though, the tool may give you false information.
 * The tool supports NTFS version 3.1 only
 
