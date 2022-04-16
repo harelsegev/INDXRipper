@@ -48,6 +48,8 @@ python INDXRipper.py -m D: -w bodyfile --slack-only  \\.\D: output.bodyfile
 
 INDXRipper is best used in combination with other tools to create a super timeline. The **--slack-only** switch should filter out data that might not be necessary in your timeline if you use fls or an MFT parser. you may also use the **--dedup** switch, and the bodyfile output option.
 
+#### Using the sleuthkit
+
 ```bash
 # fls from the sleuthkit
 fls -o 128 -m C: -r image.raw > temp.bodyfile
@@ -58,9 +60,15 @@ INDXRipper -o 128 -m C: -w bodyfile --deleted-dirs --slack-only --dedup image.ra
 mactime -z UTC -b temp.bodyfile > image.timeline
 ```
 
-https://www.youtube.com/watch?v=0HT1uiP-BRg
+#### Using Plaso
 
-#### The bodyfile output
+```bash
+# output to a new file
+INDXRipper.py -o 128 -w bodyfile --deleted-dirs --slack-only --dedup image.raw temp.bodyfile
+
+# add the output to an existing plaso storage file
+log2timeline.py --parsers mactime --storage-file storage.plaso temp.bodyfile
+```
 
 Note that the bodyfile format is specific to the sleuthkit and is not fully documented. INDXRipper's bodyfile output is not fully compatible with it.
 
