@@ -188,16 +188,6 @@ def apply_record_fixup(mft_chunk, record_header, vbr):
     return True
 
 
-def apply_fixup(mft_chunk, record_headers, vbr):
-    for record_header in record_headers:
-        if is_valid_record_signature(record_header):
-            record_header["IsValidFixup"] = apply_record_fixup(mft_chunk, record_header, vbr)
-
-
-def is_valid_fixup(record_header):
-    return record_header["IsValidFixup"]
-
-
 def is_used(record_header):
     return record_header["Flags"]["IN_USE"]
 
@@ -269,21 +259,23 @@ def get_non_resident_attribute(vbr, raw_image, mft_chunk, attribute_header, is_a
     return NonResidentStream(vbr["BytsPerClus"], vbr["OffsetInImage"], raw_image, dataruns, is_allocated)
 
 
-def panic_on_invalid_first_record(record_header):
-    if not is_valid_record_signature(record_header):
+def get_first_record_header(vbr, raw_image):
+    panic_on_invalid_boot_sector(vbr)
+    mft_chunk = get_first_mft_chunk(vbr, raw_image)
+    first_record_header = get_record_headers(mft_chunk, vbr)[0]
+
+    if not is_valid_record_signature(first_record_header):
         sys_exit(f"INDXRipper: error: invalid 'FILE' signature in first file record")
 
-    if not is_valid_fixup(record_header):
+    if not apply_record_fixup(mft_chunk, first_record_header, vbr):
         sys_exit(f"INDXRipper: error: fixup validation failed for first file record")
+
+    return mft_chunk, first_record_header
 
 
 def get_first_mft_data_attribute(vbr, raw_image):
-    panic_on_invalid_boot_sector(vbr)
-    mft_chunk = get_first_mft_chunk(vbr, raw_image)
-    record_headers = get_record_headers(mft_chunk, vbr)
-    apply_fixup(mft_chunk, record_headers, vbr)
-    panic_on_invalid_first_record(record_headers[0])
-    attribute_headers = get_attribute_headers(mft_chunk, record_headers[0])
+    mft_chunk, first_record_header = get_first_record_header(vbr, raw_image)
+    attribute_headers = get_attribute_headers(mft_chunk, first_record_header)
     mft_data_attribute_header = next(get_attribute_header(attribute_headers, "DATA"))
     return get_non_resident_attribute(vbr, raw_image, mft_chunk, mft_data_attribute_header, True)
 

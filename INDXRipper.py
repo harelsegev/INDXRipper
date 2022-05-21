@@ -11,9 +11,9 @@ from contextlib import suppress
 
 from ntfs import parse_filename_attribute, get_resident_attribute, get_attribute_name, get_attribute_type
 from ntfs import get_boot_sector, get_first_mft_data_attribute, get_base_record_reference, is_base_record
-from ntfs import is_valid_fixup, is_valid_record_signature, get_attribute_headers, is_used
+from ntfs import is_valid_record_signature, apply_record_fixup, get_attribute_headers, is_used
 from ntfs import EmptyNonResidentAttributeError, get_non_resident_attribute, is_directory
-from ntfs import get_mft_chunks, get_record_headers, apply_fixup, get_sequence_number
+from ntfs import get_mft_chunks, get_record_headers, get_sequence_number
 from ntfs import get_attribute_header, get_mft_index
 
 from indx import get_index_records, is_slack, get_index_entry_parent_reference, get_index_entry_filename
@@ -74,18 +74,22 @@ def get_mft_dict_values(vbr, raw_image, mft_chunk, record_header, is_allocated):
     return values
 
 
+def apply_fixup(mft_chunk, record_header, vbr):
+    if apply_record_fixup(mft_chunk, record_header, vbr):
+        return True
+
+    record_index = get_mft_index(record_header)
+    warning(f"fixup validation failed for file record at index {record_index}. ignoring this record")
+
+    return False
+
+
 def get_mft_records(mft_data_attribute, vbr):
     for mft_chunk in get_mft_chunks(vbr, mft_data_attribute):
         record_headers = get_record_headers(mft_chunk, vbr)
-        apply_fixup(mft_chunk, record_headers, vbr)
 
         for record_header in record_headers:
             if is_valid_record_signature(record_header):
-                if not is_valid_fixup(record_header):
-                    record_index = get_mft_index(record_header)
-                    warning(f"fixup validation failed for file record at index {record_index}. ignoring this record")
-                    continue
-
                 yield mft_chunk, record_header
 
 
@@ -98,7 +102,7 @@ def add_values_to_mft_dict(mft_dict, key, values):
 
 
 def add_to_mft_dict(mft_dict, mft_chunk, record_header, deleted_dirs, raw_image, vbr):
-    if is_directory(record_header):
+    if is_directory(record_header) and apply_fixup(mft_chunk, record_header, vbr):
         is_allocated = is_used(record_header)
 
         if is_allocated or deleted_dirs:
@@ -115,7 +119,7 @@ def add_to_mft_dict(mft_dict, mft_chunk, record_header, deleted_dirs, raw_image,
 
 
 def add_to_extra_mft_data_attributes(mft_chunk, record_header, extra_mft_data_attributes, raw_image, vbr):
-    if is_used(record_header):
+    if is_used(record_header) and apply_fixup(mft_chunk, record_header, vbr):
         attribute_headers = get_attribute_headers(mft_chunk, record_header)
 
         with suppress(StopIteration):
