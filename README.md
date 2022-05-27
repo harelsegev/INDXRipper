@@ -25,7 +25,7 @@ Python 3.9 or above is required.
 Use the package manager [pip](https://pip.pypa.io/en/stable/) to install construct.
 
 ```bash
-pip install construct==2.10.67
+pip install construct==2.10.68
 ```
 Alternatively, you can use the Windows packaged release. 
 
