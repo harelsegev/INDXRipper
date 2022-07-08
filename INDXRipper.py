@@ -288,8 +288,8 @@ def get_output_lines_helper(index_entries, output_format):
 def get_output_lines(mft_dict, vbr, root_name, slack_only, output_format):
     yield get_format_header(output_format)
 
-    for key in mft_dict:
-        if index_attributes := mft_dict[key]["$INDEX_ALLOCATION"]:
+    for key, values in mft_dict.items():
+        if index_attributes := values["$INDEX_ALLOCATION"]:
             index_entries = get_index_entries(index_attributes, vbr, mft_dict, key, root_name, slack_only)
             yield from get_output_lines_helper(index_entries, output_format)
 
