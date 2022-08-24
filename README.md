@@ -26,19 +26,25 @@ Using the Windows [packaged releases](https://github.com/harelsegev/INDXRipper/r
 Clone the repository:
 ```bash
 git clone https://github.com/harelsegev/INDXRipper.git
-cd INDXRipper
 ```
 
 Python 3.9 or above is required. Create a virtualenv and use the package manager [pip](https://pip.pypa.io/en/stable/) to install construct:
 ```bash
+cd INDXRipper
 python3.9 -m pip install virtualenv
 
 python3.9 -m virtualenv venv
 source venv/bin/activate
-pip install construct==2.10.68
 
+pip install construct==2.10.68
+```
+Now, you can execute INDXRipper:
+```bash
 # should print version information
-python INDXRipper.py -V
+venv/bin/python INDXRipper.py -V
+
+# should also work when executed as root
+sudo venv/bin/python INDXRipper.py -V
 ```
 
 ## Usage Examples
