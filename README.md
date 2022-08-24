@@ -20,14 +20,26 @@ For a more detailed explanation of this artifact, watch this 13Cubed episode:
 https://www.youtube.com/watch?v=x-M-wyq3BXA
 
 ## Installation
+Using the Windows [packaged releases](https://github.com/harelsegev/INDXRipper/releases) is the easiest way to get started.
 
-Python 3.9 or above is required.  
-Use the package manager [pip](https://pip.pypa.io/en/stable/) to install construct.
-
+### I use Linux
+Clone the repository:
 ```bash
-pip install construct==2.10.68
+git clone https://github.com/harelsegev/INDXRipper.git
+cd INDXRipper
 ```
-Alternatively, you can use the Windows packaged release. 
+
+Python 3.9 or above is required. Create a virtualenv and use the package manager [pip](https://pip.pypa.io/en/stable/) to install construct:
+```bash
+python3.9 -m pip install virtualenv
+
+python3.9 -m virtualenv venv
+source venv/bin/activate
+pip install construct==2.10.68
+
+# should print version information
+python INDXRipper.py -V
+```
 
 ## Usage Examples
 
