@@ -79,7 +79,7 @@ def apply_fixup(mft_chunk, record_header, vbr):
         return True
 
     record_index = get_mft_index(record_header)
-    warning(f"fixup validation failed for file record at index {record_index}. ignoring this record")
+    warning(f"fixup validation failed for file record {record_index}. skipping this record")
 
     return False
 
@@ -209,8 +209,8 @@ def get_index_entries_in_record(index_record, parent_path):
         yield index_entry
 
 
-def get_index_entries_in_deleted_attribute(index_attribute, vbr, mft_dict, root_name):
-    for index_record in get_index_records(index_attribute, vbr):
+def get_index_entries_in_deleted_attribute(index_attribute, vbr, mft_dict, key, root_name):
+    for index_record in get_index_records(index_attribute, key, vbr):
         with suppress(StopIteration):
             first_entry = next(index_record)
             parent_path = get_parent_path(first_entry, mft_dict, root_name)
@@ -223,7 +223,7 @@ def get_index_entries_in_deleted_attribute(index_attribute, vbr, mft_dict, root_
 
 def get_index_entries_in_allocated_attribute(index_attribute, vbr, mft_dict, key, root_name):
     parent_path = get_path(mft_dict, key, root_name)
-    for index_record in get_index_records(index_attribute, vbr):
+    for index_record in get_index_records(index_attribute, key, vbr):
         yield from get_index_entries_in_record(index_record, parent_path)
 
 
@@ -231,7 +231,7 @@ def get_index_entries_in_attribute(index_attribute, vbr, mft_dict, key, root_nam
     if index_attribute.is_allocated:
         yield from get_index_entries_in_allocated_attribute(index_attribute, vbr, mft_dict, key, root_name)
     else:
-        yield from get_index_entries_in_deleted_attribute(index_attribute, vbr, mft_dict, root_name)
+        yield from get_index_entries_in_deleted_attribute(index_attribute, vbr, mft_dict, key, root_name)
 
 
 def get_all_index_entries(index_attributes, vbr, mft_dict, key, root_name):

@@ -41,9 +41,13 @@ class FiletimeAdapter(Adapter):
 Filetime = FiletimeAdapter(Int64ul)
 
 
+MIN_ENTRY_SIZE = 16
+
 INDEX_ENTRY = Struct(
     "FileReference" / FILE_REFERENCE,
     "EntrySize" / Int16ul,
+
+    Check(lambda this: this._.is_slack or this.EntrySize >= MIN_ENTRY_SIZE),
     Padding(2),
 
     "EntryFlags" / FlagsEnum(Int8ul, POINTS_TO_A_SUBNODE=0x01, LAST_ENTRY=0x2),
@@ -196,19 +200,33 @@ def remove_allocated_space(index_record, record_header):
     index_record[:0] = b"\x00" * TIMESTAMPS_OFFSET_IN_ENTRY
 
 
-def get_entries_in_record(index_record, record_header):
-    with suppress(StreamError, CheckError, OverflowError, UnicodeDecodeError):
+def get_entries_in_record(index_record, key, record_header):
+    try:
         yield from get_allocated_entries_in_record(index_record, record_header)
         remove_allocated_space(index_record, record_header)
-        yield from get_entries_in_slack(index_record)
+
+    except (StreamError, CheckError, OverflowError, UnicodeDecodeError):
+        mft_index, _ = key
+        warning(
+            f"an error occurred while parsing an index record (file record {mft_index}). "
+            f"the entire record will be treated as slack space"
+        )
+
+    yield from get_entries_in_slack(index_record)
 
 
-def get_index_records(index_allocation_attribute, vbr):
+def get_index_records(index_allocation_attribute, key, vbr):
     for index_record, record_header in get_raw_index_records(index_allocation_attribute, vbr):
         if is_valid_fixup(record_header):
-            yield get_entries_in_record(index_record, record_header)
+            yield get_entries_in_record(index_record, key, record_header)
+
         else:
-            warning("fixup validation failed for an index record. the entire record will be treated as slack space")
+            mft_index, _ = key
+            warning(
+                f"fixup validation failed for an index record (file record {mft_index}). "
+                f"the entire record will be treated as slack space"
+            )
+
             yield get_entries_in_slack(index_record)
 
 
