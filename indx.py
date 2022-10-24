@@ -11,6 +11,7 @@ from construct import StreamError
 from datetime import datetime, timedelta
 from contextlib import suppress
 from io import BytesIO
+import unicodedata
 import re
 
 from ntfs import FILE_REFERENCE
@@ -85,7 +86,10 @@ INDEX_ENTRY = Struct(
     "FilenameNamespace" / Enum(Int8ul, POSIX=0, WIN32=1, DOS=2, WIN32_DOS=3),
     "FilenameInUnicode" / PaddedString(lambda this: this.FilenameLengthInCharacters * 2, "utf16"),
 
-    Check(lambda this: not this._.is_slack or this.FilenameInUnicode.isprintable()),
+    Check(lambda this: not this._.is_slack or not any(
+        (unicodedata.category(ch) in ["Cc", "Cs", "Co", "Cn"] for ch in this.FilenameInUnicode)
+    )),
+
     "IsSlack" / Computed(lambda this: this._.is_slack)
 )
 
