@@ -176,10 +176,10 @@ def is_valid_record_signature(record_header):
 
 def apply_record_fixup(mft_chunk, record_header, vbr):
     usn = record_header["UpdateSequenceNumber"]
-    first_fixup_offset = record_header["OffsetInChunk"] + vbr["BytsPerSec"] - 2
+    first_fixup_offset = record_header["OffsetInChunk"] + 512 - 2
     end_of_record_offset = record_header["OffsetInChunk"] + vbr["BytsPerRec"]
 
-    for i, usn_offset in enumerate(range(first_fixup_offset, end_of_record_offset, vbr["BytsPerSec"])):
+    for i, usn_offset in enumerate(range(first_fixup_offset, end_of_record_offset, 512)):
         if Int16ul.parse(mft_chunk[usn_offset:usn_offset + 2]) != usn:
             return False
 

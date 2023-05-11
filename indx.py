@@ -119,7 +119,7 @@ def get_first_entry_offset(record_header):
 
 
 def apply_fixup(index_record, record_header, vbr):
-    for i, usn_offset in enumerate(range(vbr["BytsPerSec"] - 2, vbr["BytsPerIndx"], vbr["BytsPerSec"])):
+    for i, usn_offset in enumerate(range(512 - 2, vbr["BytsPerIndx"], 512)):
         if Int16ul.parse(index_record[usn_offset:usn_offset + 2]) != record_header["UpdateSequence"]:
             return False
 
