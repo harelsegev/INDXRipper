@@ -95,13 +95,13 @@ Note that the bodyfile format is specific to the sleuthkit and is not fully docu
 ### Basic features
 * Applies fixups for index records and MFT records
 * Handles $INDEX_ALLOCATION and $FILE_NAME attributes in extension records
-* Full paths are resolved using the parent directory references from the MFT records.
+* File paths are resolved using the parent directory references from the MFT records.
 * Works on live Windows NTFS drives, using device paths
 * All times outputted are in UTC
 
 ### The --slack-only switch
 
-Not all the entries in slack space are outputted in this mode.
+**Not all the entries in slack space are outputted in this mode.**
 
 A lot of the entries in slack space are old entries of active files. Those old entries contain a "snapshot" of the file's metadata from an earlier point in time. Although this information may be useful in some cases, most of the time it's the deleted files I'm interested in.
 
@@ -121,16 +121,16 @@ In a deleted directory, INDXRipper resolves the full path for the files in each 
 
 Some files and folders may be listed under **/$Orphan**. This means they are deleted, their parent folder is also deleted, and their full path could not be resolved.
 
-Files listed under **\<Unknown\>**, on the other hand - are not necessarily deleted. Those entries were found in a deleted directory, and INDXRipper could not determine their parent directory. 
+Files listed under **\<Unknown\>**, on the other hand - are not necessarily deleted. It means the entries were found in a deleted directory, and INDXRipper could not determine their parent directory. 
 
 ## Limitations
-* The tool may give false results. While false positives are rare, they are possible.
+* The tool may give false results. While false positives are rare, [they are possible](https://harelsegev.github.io/posts/i30-parsers-output-false-entries.-heres-why/).
 * Partially overwritten entries may not be found. If they are found, though, the tool may give you false information.
 * The tool supports NTFS version 3.1 only
 
 ### What this tool doesn't do
 * This tool doesn't process $INDEX_ROOT attributes.
-* This tool doesn't carve $INDEX_ALLOCATION attributes from unallocated space.
+* This tool doesn't carve INDX records from unallocated space.
 
 
 ## License
