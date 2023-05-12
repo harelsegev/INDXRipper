@@ -119,13 +119,14 @@ def get_first_entry_offset(record_header):
 
 
 def apply_fixup(index_record, record_header, vbr):
+    is_valid = True
     for i, usn_offset in enumerate(range(512 - 2, vbr["BytsPerIndx"], 512)):
         if Int16ul.parse(index_record[usn_offset:usn_offset + 2]) != record_header["UpdateSequence"]:
-            return False
+            is_valid = False
 
         index_record[usn_offset:usn_offset + 2] = Int16ul.build(record_header["UpdateSequenceArray"][i])
 
-    return True
+    return is_valid
 
 
 def get_raw_index_records(index_allocation_attribute, vbr):
