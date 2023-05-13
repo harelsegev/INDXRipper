@@ -4,7 +4,7 @@
     5/12/2021
 """
 
-from construct import Struct, Const, Padding, Array, Seek, Optional, StopIf, FlagsEnum, Enum, Check
+from construct import Struct, Const, Padding, Array, Seek, StopIf, ConstError, FlagsEnum, Enum, Check
 from construct import PaddedString, Adapter, CheckError, Computed, Int8ul, Int16ul, Int32ul, Int64ul
 from construct import StreamError
 
@@ -14,15 +14,19 @@ from io import BytesIO
 import unicodedata
 import re
 
-from ntfs import FILE_REFERENCE
+from ntfs import FILE_REFERENCE, FIXUP_INTERVAL
 from fmt import warning
 
+MAX_USA_OFFSET = FIXUP_INTERVAL - 6
+MIN_USA_OFFSET = 40
+
 INDEX_RECORD_HEADER = Struct(
-    "Magic" / Optional(Const(b'INDX')),
-    StopIf(lambda this: this.Magic is None),
+    "Magic" / Const(b'INDX'),
 
     "UpdateSequenceOffset" / Int16ul,
     "UpdateSequenceSize" / Int16ul,
+    Check(lambda this: MIN_USA_OFFSET <= this.UpdateSequenceOffset <= MAX_USA_OFFSET),
+    Check(lambda this: (this.UpdateSequenceSize - 1) * FIXUP_INTERVAL == this._.record_size),
 
     Padding(16),
     "FirstEntryOffset" / Int32ul,
@@ -99,12 +103,8 @@ def get_raw_index_records_helper(index_allocation_attribute, vbr):
         yield current_record
 
 
-def get_index_record_header(index_record):
-    return INDEX_RECORD_HEADER.parse(index_record)
-
-
-def is_valid_index_record(record_header):
-    return record_header["Magic"] is not None
+def get_index_record_header(index_record, vbr):
+    return INDEX_RECORD_HEADER.parse(index_record, record_size=vbr["BytsPerIndx"])
 
 
 NODE_HEADER_OFFSET_IN_RECORD = 24
@@ -120,7 +120,7 @@ def get_first_entry_offset(record_header):
 
 def apply_fixup(index_record, record_header, vbr):
     is_valid = True
-    for i, usn_offset in enumerate(range(512 - 2, vbr["BytsPerIndx"], 512)):
+    for i, usn_offset in enumerate(range(FIXUP_INTERVAL - 2, vbr["BytsPerIndx"], FIXUP_INTERVAL)):
         if Int16ul.parse(index_record[usn_offset:usn_offset + 2]) != record_header["UpdateSequence"]:
             is_valid = False
 
@@ -131,15 +131,9 @@ def apply_fixup(index_record, record_header, vbr):
 
 def get_raw_index_records(index_allocation_attribute, vbr):
     for index_record in get_raw_index_records_helper(index_allocation_attribute, vbr):
-        record_header = get_index_record_header(index_record)
-
-        if is_valid_index_record(record_header):
-            record_header["IsValidFixup"] = apply_fixup(index_record, record_header, vbr)
+        with suppress(ConstError, CheckError):
+            record_header = get_index_record_header(index_record, vbr)
             yield index_record, record_header
-
-
-def is_valid_fixup(record_header):
-    return record_header["IsValidFixup"]
 
 
 def get_allocated_entries_in_record(index_record, record_header):
@@ -222,7 +216,7 @@ def get_entries_in_record(index_record, key, record_header):
 
 def get_index_records(index_allocation_attribute, key, vbr):
     for index_record, record_header in get_raw_index_records(index_allocation_attribute, vbr):
-        if is_valid_fixup(record_header):
+        if apply_fixup(index_record, record_header, vbr):
             yield get_entries_in_record(index_record, key, record_header)
 
         else:

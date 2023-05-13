@@ -174,12 +174,15 @@ def is_valid_record_signature(record_header):
     return record_header["Magic"] is not None
 
 
+FIXUP_INTERVAL = 512
+
+
 def apply_record_fixup(mft_chunk, record_header, vbr):
     usn = record_header["UpdateSequenceNumber"]
-    first_fixup_offset = record_header["OffsetInChunk"] + 512 - 2
+    first_fixup_offset = record_header["OffsetInChunk"] + FIXUP_INTERVAL - 2
     end_of_record_offset = record_header["OffsetInChunk"] + vbr["BytsPerRec"]
 
-    for i, usn_offset in enumerate(range(first_fixup_offset, end_of_record_offset, 512)):
+    for i, usn_offset in enumerate(range(first_fixup_offset, end_of_record_offset, FIXUP_INTERVAL)):
         if Int16ul.parse(mft_chunk[usn_offset:usn_offset + 2]) != usn:
             return False
 
