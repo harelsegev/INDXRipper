@@ -5,7 +5,7 @@
 """
 
 from construct import Struct, Padding, Computed, IfThenElse, BytesInteger, Const, Enum, Array, FlagsEnum, Switch, Tell
-from construct import PaddedString, Pointer, Seek, Optional, StopIf, RepeatUntil, Padded
+from construct import Pointer, Seek, Optional, StopIf, RepeatUntil, Padded, Adapter, Bytes
 from construct import Int8ul, Int16ul, Int32ul, Int64ul, Int8sl
 
 from dataruns import get_dataruns, NonResidentStream
@@ -14,6 +14,11 @@ from sys import exit as sys_exit
 
 class EmptyNonResidentAttributeError(ValueError):
     pass
+
+
+class WideCharacterStringAdapter(Adapter):
+    def _decode(self, obj, context, path):
+        return obj.decode("UTF-16LE", errors="replace")
 
 
 BOOT_SECTOR = Struct(
@@ -105,7 +110,7 @@ ATTRIBUTE_HEADER = Struct(
     "NameLength" / Int8ul,
     "NameOffset" / Int16ul,
     "AttributeName" / Pointer(lambda this: this.NameOffset + this.OffsetInChunk,
-                              PaddedString(lambda this: 2 * this.NameLength, "utf16")),
+                              WideCharacterStringAdapter(Bytes(lambda this: 2 * this.NameLength))),
     Padding(4),
     "Metadata" / Switch(
         lambda this: this.Residence,
@@ -139,7 +144,7 @@ FILENAME_ATTRIBUTE = Struct(
     Padding(56),
     "FilenameLengthInCharacters" / Int8ul,
     "FilenameNamespace" / Enum(Int8ul, POSIX=0, WIN32=1, DOS=2, WIN32_DOS=3),
-    "FilenameInUnicode" / PaddedString(lambda this: this.FilenameLengthInCharacters * 2, "utf16")
+    "FilenameInUnicode" / WideCharacterStringAdapter(Bytes(lambda this: this.FilenameLengthInCharacters * 2))
 )
 
 

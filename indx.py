@@ -5,7 +5,7 @@
 """
 
 from construct import Struct, Const, Padding, Array, Seek, StopIf, ConstError, FlagsEnum, Enum, Check
-from construct import PaddedString, Adapter, CheckError, Computed, Int8ul, Int16ul, Int32ul, Int64ul
+from construct import Bytes, Adapter, CheckError, Computed, Int8ul, Int16ul, Int32ul, Int64ul
 from construct import StreamError
 
 from datetime import datetime, timedelta
@@ -14,7 +14,7 @@ from io import BytesIO
 import unicodedata
 import re
 
-from ntfs import FILE_REFERENCE, FIXUP_INTERVAL
+from ntfs import WideCharacterStringAdapter, FILE_REFERENCE, FIXUP_INTERVAL
 from fmt import warning
 
 MAX_USA_OFFSET = FIXUP_INTERVAL - 6
@@ -88,7 +88,7 @@ INDEX_ENTRY = Struct(
 
     "FilenameLengthInCharacters" / Int8ul,
     "FilenameNamespace" / Enum(Int8ul, POSIX=0, WIN32=1, DOS=2, WIN32_DOS=3),
-    "FilenameInUnicode" / PaddedString(lambda this: this.FilenameLengthInCharacters * 2, "utf16"),
+    "FilenameInUnicode" / WideCharacterStringAdapter(Bytes(lambda this: this.FilenameLengthInCharacters * 2)),
 
     Check(lambda this: not this._.is_slack or not any(
         (unicodedata.category(ch) in ["Cc", "Cs", "Co", "Cn"] for ch in this.FilenameInUnicode)
