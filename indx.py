@@ -91,7 +91,7 @@ INDEX_ENTRY = Struct(
     "FilenameInUnicode" / WideCharacterStringAdapter(Bytes(lambda this: this.FilenameLengthInCharacters * 2)),
 
     Check(lambda this: not this._.is_slack or not any(
-        (unicodedata.category(ch) in ["Cc", "Cs", "Co", "Cn"] for ch in this.FilenameInUnicode)
+        (unicodedata.category(ch) in ["Cc", "Co", "Cn"] for ch in this.FilenameInUnicode)
     )),
 
     "IsSlack" / Computed(lambda this: this._.is_slack)
