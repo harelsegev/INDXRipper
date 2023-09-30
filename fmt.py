@@ -19,7 +19,11 @@ def to_iso(timestamp: datetime):
 
 
 COMMON_FIELDS = {
-    "full_path": lambda index_entry: index_entry["ParentPath"] + "/" + index_entry["FilenameInUnicode"],
+    "parent_path": lambda index_entry: index_entry["ParentPath"],
+    "filename": lambda index_entry: index_entry["FilenameInUnicode"],
+
+    "parent_index": lambda index_entry: index_entry["ParentDirectoryReference"]["FileRecordNumber"],
+    "parent_sequence": lambda index_entry: index_entry["ParentDirectoryReference"]["SequenceNumber"],
 
     "index": lambda index_entry: index_entry["FileReference"]["FileRecordNumber"],
     "sequence": lambda index_entry: index_entry["FileReference"]["SequenceNumber"],
@@ -31,27 +35,25 @@ COMMON_FIELDS = {
     "m_time": lambda index_entry: index_entry["LastModificationTime"],
     "a_time": lambda index_entry: index_entry["LastAccessTime"],
     "c_time": lambda index_entry: index_entry["LastMftChangeTime"],
+
+    "flags": lambda index_entry: "|".join
+    (
+        [flag for flag in index_entry["Flags"] if index_entry["Flags"][flag] and flag != "_flagsenum"]
+    ),
+
+    "source": lambda index_entry: "Index Slack" if index_entry["IsSlack"] else "Index Record"
 }
 
 OUTPUT_FORMATS = {
     "csv":
     {
-        "fmt": "{source},\"{full_path}\",{flags},{index},{sequence},"
+        "fmt": "{source},\"{parent_path}\",{parent_index},{parent_sequence},\"{filename}\",{flags},{index},{sequence},"
                "{size},{alloc_size},{cr_time},{m_time},{a_time},{c_time}\n",
 
-        "header": "Source,Path,Flags,FileNumber,SequenceNumber,Size,"
-                  "AllocatedSize,CreationTime,ModificationTime,AccessTime,ChangedTime\n",
+        "header": "Source,ParentPath,ParentFileNumber,ParentSequenceNumber,Filename,Flags,FileNumber,"
+                  "SequenceNumber,Size,AllocatedSize,CreationTime,ModificationTime,AccessTime,ChangedTime\n",
 
-        "fields":
-        {
-            "flags": lambda index_entry: "|".join
-            (
-                [flag for flag in index_entry["Flags"] if index_entry["Flags"][flag] and flag != "_flagsenum"]
-            ),
-
-            "source": lambda index_entry: "Index Slack" if index_entry["IsSlack"] else "Index Record"
-
-        } | COMMON_FIELDS,
+        "fields": {} | COMMON_FIELDS,
 
         "adapted_fields":
         {
@@ -60,7 +62,33 @@ OUTPUT_FORMATS = {
             "a_time": to_iso,
             "c_time": to_iso,
 
-            "full_path": lambda full_path: full_path.replace("\"", "\"\"")
+            "parent_path": lambda parent_path: parent_path.replace("\"", "\"\""),
+            "filename": lambda filename: filename.replace("\"", "\"\"")
+        }
+    },
+
+    "jsonl":
+    {
+        "fmt": "{{\"source\": \"{source}\", \"parent_path\": \"{parent_path}\", "
+               "\"parent_file_number\": \"{parent_index}\", \"parent_sequence_number\": \"{parent_sequence}\", "
+               "\"filename\": \"{filename}\", \"flags\": \"{flags}\", \"file_number\": \"{index}\", "
+               "\"sequence_number\": \"{sequence}\", \"size\": \"{size}\", \"allocated_size\": \"{alloc_size}\", "
+               "\"creation_time\": \"{cr_time}\", \"modification_time\": \"{m_time}\", \"access_time\": \"{a_time}\", "
+               "\"changed_time\": \"{c_time}\"}}\n",
+
+        "header": "",
+
+        "fields": {} | COMMON_FIELDS,
+
+        "adapted_fields":
+        {
+            "cr_time": to_iso,
+            "m_time": to_iso,
+            "a_time": to_iso,
+            "c_time": to_iso,
+
+            "parent_path": lambda parent_path: parent_path.replace("\"", "\\\""),
+            "filename": lambda filename: filename.replace("\"", "\\\"")
         }
     },
 
@@ -73,6 +101,8 @@ OUTPUT_FORMATS = {
 
         "fields":
         {
+            "full_path": lambda index_entry: index_entry["ParentPath"] + "/" + index_entry["FilenameInUnicode"],
+
             "mode_part1": lambda index_entry: "d/-" if index_entry["Flags"]["DIRECTORY"] else "r/-",
             "mode_part2": lambda index_entry: 3 * "{}{}{}".format
             (

@@ -26,22 +26,38 @@ class NoFilenameAttributeInRecordError(ValueError):
     pass
 
 
-def get_arguments():
-    parser = argparse.ArgumentParser(prog="INDXRipper", description="carve file metadata from NTFS $I30 indexes")
+DESCRIPTION = """
+   ___ _   _ ______  ______  _                       
+  |_ _| \ | |  _ \ \/ /  _ \(_)_ __  _ __   ___ _ __ 
+   | ||  \| | | | \  /| |_) | | '_ \| '_ \ / _ \ '__|
+   | || |\  | |_| /  \|  _ <| | |_) | |_) |  __/ |   
+  |___|_| \_|____/_/\_\_| \_\_| .__/| .__/ \___|_|   
+                              |_|   |_|              
+  carve file metadata from NTFS $I30 indexes
 
-    parser.add_argument("image", metavar="image", help="image file path")
-    parser.add_argument("outfile", metavar="outfile", help="output file path")
+for more information, visit https://github.com/harelsegev/INDXRipper
+"""
+
+
+def get_arguments():
+    parser = argparse.ArgumentParser(prog="INDXRipper",
+                                     description=DESCRIPTION, formatter_class=argparse.RawDescriptionHelpFormatter)
+
+    parser.add_argument("image", help="image file path")
+    parser.add_argument("outfile", help="output file path")
     parser.add_argument("-V", "--version", action='version', version=f"%(prog)s {__version__}")
 
-    parser.add_argument("-m", metavar="MOUNT_POINT", default="",
-                        help="a name to display as the mount point of the image")
+    parser.add_argument("-m", "--mount-point", default=".", help="a name to display as the mount point of the image")
+    parser.add_argument("-o", "--offset", type=int, default=0, help="offset to an NTFS partition, in sectors")
+    parser.add_argument("-b", "--sector-size", type=int, default=512, help="sector size in bytes. default is 512")
+    parser.add_argument("-f", "--output-format",
+                        choices=["csv", "jsonl", "bodyfile"], default="csv", help="output format. default is CSV")
 
-    parser.add_argument("-o", metavar="OFFSET", type=int, default=0, help="offset to an NTFS partition (in sectors)")
-    parser.add_argument("-b", metavar="SECTOR_SIZE", type=int, default=512, help="sector size in bytes. default is 512")
-    parser.add_argument("-w", choices=["csv", "bodyfile"], default="csv", help="output format. default is csv")
+    parser.add_argument("--skip-deleted-dirs", action="store_true", help="don't search entries in deleted directories")
 
-    parser.add_argument("--deleted-dirs", action="store_true", help="find entries in deleted directories")
-    parser.add_argument("--slack-only", action="store_true", help="filter out entries of allocated files")
+    parser.add_argument("--no-active-files",
+                        action="store_true", help="filter out entries (both allocated and slack) of active files")
+
     parser.add_argument("--dedup", action="store_true", help="deduplicate output lines")
     return parser.parse_args()
 
@@ -101,11 +117,11 @@ def add_values_to_mft_dict(mft_dict, key, values):
         mft_dict[key]["$FILE_NAME"] += values["$FILE_NAME"]
 
 
-def add_to_mft_dict(mft_dict, mft_chunk, record_header, deleted_dirs, raw_image, vbr):
+def add_to_mft_dict(mft_dict, mft_chunk, record_header, skip_deleted_dirs, raw_image, vbr):
     if is_directory(record_header) and apply_fixup(mft_chunk, record_header, vbr):
         is_allocated = is_used(record_header)
 
-        if is_allocated or deleted_dirs:
+        if is_allocated or not skip_deleted_dirs:
             values = get_mft_dict_values(vbr, raw_image, mft_chunk, record_header, is_allocated)
 
             if is_base_record(record_header):
@@ -129,28 +145,28 @@ def add_to_extra_mft_data_attributes(mft_chunk, record_header, extra_mft_data_at
             extra_mft_data_attributes.append(data_attribute)
 
 
-def populate_mft_dict(mft_dict, raw_image, mft_data_attribute, deleted_dirs, vbr):
+def populate_mft_dict(mft_dict, raw_image, mft_data_attribute, skip_deleted_dirs, vbr):
     extra_mft_data_attributes = []
 
     for mft_chunk, record_header in get_mft_records(mft_data_attribute, vbr):
         if get_base_record_reference(record_header) == (0, 1):
             add_to_extra_mft_data_attributes(mft_chunk, record_header, extra_mft_data_attributes, raw_image, vbr)
         else:
-            add_to_mft_dict(mft_dict, mft_chunk, record_header, deleted_dirs, raw_image, vbr)
+            add_to_mft_dict(mft_dict, mft_chunk, record_header, skip_deleted_dirs, raw_image, vbr)
 
     return extra_mft_data_attributes
 
 
-def get_mft_dict_helper(mft_dict, raw_image, mft_data_attribute, deleted_dirs, vbr):
-    extra_mft_data_attributes = populate_mft_dict(mft_dict, raw_image, mft_data_attribute, deleted_dirs, vbr)
+def get_mft_dict_helper(mft_dict, raw_image, mft_data_attribute, skip_deleted_dirs, vbr):
+    extra_mft_data_attributes = populate_mft_dict(mft_dict, raw_image, mft_data_attribute, skip_deleted_dirs, vbr)
 
     for extra_mft_data_attribute in extra_mft_data_attributes:
-        get_mft_dict_helper(mft_dict, raw_image, extra_mft_data_attribute, deleted_dirs, vbr)
+        get_mft_dict_helper(mft_dict, raw_image, extra_mft_data_attribute, skip_deleted_dirs, vbr)
 
 
-def get_mft_dict(raw_image, first_mft_data_attribute, deleted_dirs, vbr):
+def get_mft_dict(raw_image, first_mft_data_attribute, skip_deleted_dirs, vbr):
     mft_dict = {}
-    get_mft_dict_helper(mft_dict, raw_image, first_mft_data_attribute, deleted_dirs, vbr)
+    get_mft_dict_helper(mft_dict, raw_image, first_mft_data_attribute, skip_deleted_dirs, vbr)
 
     return mft_dict
 
@@ -273,8 +289,8 @@ def get_slack_index_entries(index_attributes, vbr, mft_dict, key, root_name):
     yield from filter_slack_entries(allocated_entries, slack_entries)
 
 
-def get_index_entries(index_attributes, vbr, mft_dict, key, root_name, slack_only):
-    if slack_only:
+def get_index_entries(index_attributes, vbr, mft_dict, key, root_name, no_active_files):
+    if no_active_files:
         yield from get_slack_index_entries(index_attributes, vbr, mft_dict, key, root_name)
     else:
         yield from get_all_index_entries(index_attributes, vbr, mft_dict, key, root_name)
@@ -285,24 +301,24 @@ def get_output_lines_helper(index_entries, output_format):
         yield get_entry_output(index_entry, output_format)
 
 
-def get_output_lines(mft_dict, vbr, root_name, slack_only, output_format):
+def get_output_lines(mft_dict, vbr, root_name, no_active_files, output_format):
     yield get_format_header(output_format)
 
     for key, values in mft_dict.items():
         if index_attributes := values["$INDEX_ALLOCATION"]:
-            index_entries = get_index_entries(index_attributes, vbr, mft_dict, key, root_name, slack_only)
+            index_entries = get_index_entries(index_attributes, vbr, mft_dict, key, root_name, no_active_files)
             yield from get_output_lines_helper(index_entries, output_format)
 
 
 def main():
     args = get_arguments()
     with open(args.image, "rb") as raw_image:
-        vbr = get_boot_sector(raw_image, args.o * args.b)
+        vbr = get_boot_sector(raw_image, args.offset * args.sector_size)
         first_mft_data_attribute = get_first_mft_data_attribute(vbr, raw_image)
-        mft_dict = get_mft_dict(raw_image, first_mft_data_attribute, args.deleted_dirs, vbr)
+        mft_dict = get_mft_dict(raw_image, first_mft_data_attribute, args.skip_deleted_dirs, vbr)
 
-        output_lines = get_output_lines(mft_dict, vbr, args.m, args.slack_only, args.w)
-        write_output_lines(output_lines, args.outfile, args.dedup, args.w)
+        output_lines = get_output_lines(mft_dict, vbr, args.mount_point, args.no_active_files, args.output_format)
+        write_output_lines(output_lines, args.outfile, args.dedup, args.output_format)
 
 
 if __name__ == '__main__':
