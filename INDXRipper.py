@@ -26,7 +26,7 @@ class NoFilenameAttributeInRecordError(ValueError):
     pass
 
 
-DESCRIPTION = """
+DESCRIPTION = r"""
    ___ _   _ ______  ______  _                       
   |_ _| \ | |  _ \ \/ /  _ \(_)_ __  _ __   ___ _ __ 
    | ||  \| | | | \  /| |_) | | '_ \| '_ \ / _ \ '__|
