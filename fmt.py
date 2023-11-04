@@ -5,6 +5,7 @@
 """
 
 import os
+import json
 import tempfile
 from sys import stderr
 from datetime import timezone, datetime
@@ -36,11 +37,6 @@ COMMON_FIELDS = {
     "a_time": lambda index_entry: index_entry["LastAccessTime"],
     "c_time": lambda index_entry: index_entry["LastMftChangeTime"],
 
-    "flags": lambda index_entry: "|".join
-    (
-        [flag for flag in index_entry["Flags"] if index_entry["Flags"][flag] and flag != "_flagsenum"]
-    ),
-
     "source": lambda index_entry: "Index Slack" if index_entry["IsSlack"] else "Index Record"
 }
 
@@ -53,7 +49,13 @@ OUTPUT_FORMATS = {
         "header": "Source,ParentPath,ParentFileNumber,ParentSequenceNumber,Filename,Flags,FileNumber,"
                   "SequenceNumber,Size,AllocatedSize,CreationTime,ModificationTime,AccessTime,ChangedTime\n",
 
-        "fields": {} | COMMON_FIELDS,
+        "fields":
+        {
+            "flags": lambda index_entry: "|".join
+            (
+                [flag for flag in index_entry["Flags"] if index_entry["Flags"][flag] and flag != "_flagsenum"]
+            )
+        } | COMMON_FIELDS,
 
         "adapted_fields":
         {
@@ -70,15 +72,20 @@ OUTPUT_FORMATS = {
     "jsonl":
     {
         "fmt": "{{\"source\": \"{source}\", \"parent_path\": \"{parent_path}\", "
-               "\"parent_file_number\": \"{parent_index}\", \"parent_sequence_number\": \"{parent_sequence}\", "
-               "\"filename\": \"{filename}\", \"flags\": \"{flags}\", \"file_number\": \"{index}\", "
-               "\"sequence_number\": \"{sequence}\", \"size\": \"{size}\", \"allocated_size\": \"{alloc_size}\", "
+               "\"parent_file_number\": {parent_index}, \"parent_sequence_number\": {parent_sequence}, "
+               "\"filename\": \"{filename}\", \"flags\": {flags}, \"file_number\": {index}, "
+               "\"sequence_number\": {sequence}, \"size\": {size}, \"allocated_size\": {alloc_size}, "
                "\"creation_time\": \"{cr_time}\", \"modification_time\": \"{m_time}\", \"access_time\": \"{a_time}\", "
                "\"changed_time\": \"{c_time}\"}}\n",
 
         "header": "",
 
-        "fields": {} | COMMON_FIELDS,
+        "fields":
+        {
+            "flags": lambda index_entry: json.dumps({
+                flag: index_entry["Flags"][flag] for flag in index_entry["Flags"] if flag != "_flagsenum"
+            })
+        } | COMMON_FIELDS,
 
         "adapted_fields":
         {
