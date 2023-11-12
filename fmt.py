@@ -4,11 +4,11 @@
     31/12/2021
 """
 
-import os
-import json
-import tempfile
-from sys import stderr
 from datetime import timezone, datetime
+from sys import stderr
+import tempfile
+import json
+import os
 
 
 def to_epoch(timestamp: datetime):
@@ -37,7 +37,7 @@ COMMON_FIELDS = {
     "a_time": lambda index_entry: index_entry["LastAccessTime"],
     "c_time": lambda index_entry: index_entry["LastMftChangeTime"],
 
-    "source": lambda index_entry: "Index Slack" if index_entry["IsSlack"] else "Index Record"
+    "source": lambda index_entry: "Index Record" if index_entry["IsAllocated"] else "Index Slack"
 }
 
 OUTPUT_FORMATS = {
@@ -118,7 +118,7 @@ OUTPUT_FORMATS = {
               "x"
             ),
 
-            "slack": lambda index_entry: " (slack)" if index_entry["IsSlack"] else ""
+            "slack": lambda index_entry: "" if index_entry["IsAllocated"] else " (slack)"
 
         } | COMMON_FIELDS,
 

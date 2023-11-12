@@ -5,16 +5,14 @@
 """
 __version__ = "6.0.0"
 
-import argparse
 from contextlib import suppress
-
+import argparse
 
 from ntfs import parse_filename_attribute, get_resident_attribute, get_attribute_name, get_attribute_type
 from ntfs import get_boot_sector, get_first_mft_data_attribute, get_base_record_reference, is_base_record
-from ntfs import is_valid_record_signature, apply_record_fixup, get_attribute_headers, is_used
-from ntfs import EmptyNonResidentAttributeError, get_non_resident_attribute, is_directory
-from ntfs import get_mft_chunks, get_record_headers, get_sequence_number
-from ntfs import get_attribute_header, get_mft_index
+from ntfs import apply_record_fixup, get_attribute_headers, is_used, EmptyNonResidentAttributeError
+from ntfs import get_mft_chunks, get_record_headers, get_attribute_header, get_mft_index
+from ntfs import get_non_resident_attribute, is_directory, get_sequence_number
 
 from indx import get_index_records, is_slack, get_index_entry_parent_reference, get_index_entry_filename
 from indx import get_index_entry_file_reference
@@ -45,13 +43,13 @@ def get_arguments():
 
     parser.add_argument("image", help="image file path")
     parser.add_argument("outfile", help="output file path")
-    parser.add_argument("-V", "--version", action='version', version=f"%(prog)s {__version__}")
+    parser.add_argument("-V", "--version", action="version", version=f"%(prog)s {__version__}")
 
     parser.add_argument("-m", "--mount-point", default=".", help="a name to display as the mount point of the image")
     parser.add_argument("-o", "--offset", type=int, default=0, help="offset to an NTFS partition, in sectors")
     parser.add_argument("-b", "--sector-size", type=int, default=512, help="sector size in bytes. default is 512")
     parser.add_argument("-f", "--output-format",
-                        choices=["csv", "jsonl", "bodyfile"], default="csv", help="output format. default is CSV")
+                        choices=["csv", "jsonl", "bodyfile"], default="csv", help="output format. default is csv")
 
     parser.add_argument("--skip-deleted-dirs", action="store_true", help="don't search entries in deleted directories")
 
@@ -105,7 +103,7 @@ def get_mft_records(mft_data_attribute, vbr):
         record_headers = get_record_headers(mft_chunk, vbr)
 
         for record_header in record_headers:
-            if is_valid_record_signature(record_header):
+            if record_header:
                 yield mft_chunk, record_header
 
 
@@ -321,5 +319,5 @@ def main():
         write_output_lines(output_lines, args.outfile, args.dedup, args.output_format)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

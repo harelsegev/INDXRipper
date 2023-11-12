@@ -4,9 +4,9 @@
     5/12/2021
 """
 
-from construct import Struct, Const, Padding, Array, Seek, StopIf, ConstError, FlagsEnum, Enum, Check
+from construct import Struct, Const, Padding, Array, Seek, StopIf, ConstError, FlagsEnum, Enum, Check, If, Error
 from construct import Bytes, Adapter, CheckError, Computed, Int8ul, Int16ul, Int32ul, Int64ul
-from construct import StreamError
+from construct import StreamError, ExplicitError, this
 
 from datetime import datetime, timedelta
 from contextlib import suppress
@@ -21,21 +21,25 @@ MAX_USA_OFFSET = FIXUP_INTERVAL - 6
 MIN_USA_OFFSET = 40
 
 INDEX_RECORD_HEADER = Struct(
-    "Magic" / Const(b'INDX'),
+    "Magic" / Const(b"INDX"),
 
     "UpdateSequenceOffset" / Int16ul,
     "UpdateSequenceSize" / Int16ul,
-    Check(lambda this: MIN_USA_OFFSET <= this.UpdateSequenceOffset <= MAX_USA_OFFSET),
-    Check(lambda this: (this.UpdateSequenceSize - 1) * FIXUP_INTERVAL == this._.record_size),
+    Check(MIN_USA_OFFSET <= this.UpdateSequenceOffset <= MAX_USA_OFFSET),
+    Check((this.UpdateSequenceSize - 1) * FIXUP_INTERVAL == this._.record_size),
 
     Padding(16),
     "FirstEntryOffset" / Int32ul,
     "EndOfEntriesOffset" / Int32ul,
 
-    Seek(lambda this: this.UpdateSequenceOffset),
+    Seek(this.UpdateSequenceOffset),
     "UpdateSequence" / Int16ul,
-    "UpdateSequenceArray" / Array(lambda this: this.UpdateSequenceSize - 1, Int16ul)
-)
+    "UpdateSequenceArray" / Array(this.UpdateSequenceSize - 1, Int16ul)
+).compile()
+
+
+class InvalidFilenameError(ValueError):
+    pass
 
 
 class FiletimeAdapter(Adapter):
@@ -44,21 +48,19 @@ class FiletimeAdapter(Adapter):
 
 
 Filetime = FiletimeAdapter(Int64ul)
-
-
 MIN_ENTRY_SIZE = 16
 
 INDEX_ENTRY = Struct(
     "FileReference" / FILE_REFERENCE,
-    "EntrySize" / Int16ul,
 
-    Check(lambda this: this._.is_slack or this.EntrySize >= MIN_ENTRY_SIZE),
+    "EntrySize" / Int16ul,
+    If(this._.allocated & (this.EntrySize < MIN_ENTRY_SIZE), Error),
     Padding(2),
 
     "EntryFlags" / FlagsEnum(Int8ul, POINTS_TO_A_SUBNODE=0x01, LAST_ENTRY=0x2),
-    StopIf(lambda this: this.EntryFlags["LAST_ENTRY"] and not this._.is_slack),
-
+    StopIf(this.EntryFlags["LAST_ENTRY"] & this._.allocated),
     Padding(3),
+
     "ParentDirectoryReference" / FILE_REFERENCE,
     "CreationTime" / Filetime,
     "LastModificationTime" / Filetime,
@@ -82,20 +84,17 @@ INDEX_ENTRY = Struct(
                         OFFLINE=0x1000,
                         NOT_CONTENT_INDEXED=0x2000,
                         ENCRYPTED=0x4000,
+                        VIRTUAL=0x10000,
                         DIRECTORY=0x10000000,
                         INDEX_VIEW=0x20000000),
     Padding(4),
 
     "FilenameLengthInCharacters" / Int8ul,
     "FilenameNamespace" / Enum(Int8ul, POSIX=0, WIN32=1, DOS=2, WIN32_DOS=3),
-    "FilenameInUnicode" / WideCharacterStringAdapter(Bytes(lambda this: this.FilenameLengthInCharacters * 2)),
+    "FilenameInUnicode" / WideCharacterStringAdapter(Bytes(this.FilenameLengthInCharacters * 2)),
 
-    Check(lambda this: not this._.is_slack or not any(
-        (unicodedata.category(ch) in ["Cc", "Co", "Cn"] for ch in this.FilenameInUnicode)
-    )),
-
-    "IsSlack" / Computed(lambda this: this._.is_slack)
-)
+    "IsAllocated" / Computed(this._.allocated)
+).compile()
 
 
 def get_raw_index_records_helper(index_allocation_attribute, vbr):
@@ -136,13 +135,26 @@ def get_raw_index_records(index_allocation_attribute, vbr):
             yield index_record, record_header
 
 
+def is_invalid(filename):
+    return any((unicodedata.category(ch) in ["Cc", "Co", "Cn"] for ch in filename))
+
+
+def parse_index_entry(index_record_stream, allocated):
+    index_entry = INDEX_ENTRY.parse_stream(index_record_stream, allocated=allocated)
+
+    if not allocated and is_invalid(index_entry["FilenameInUnicode"]):
+        raise InvalidFilenameError
+
+    return index_entry
+
+
 def get_allocated_entries_in_record(index_record, record_header):
     index_record_stream = BytesIO(index_record)
     current_offset = get_first_entry_offset(record_header)
 
     while True:
         index_record_stream.seek(current_offset)
-        current_entry = INDEX_ENTRY.parse_stream(index_record_stream, is_slack=False)
+        current_entry = parse_index_entry(index_record_stream, allocated=True)
         if current_entry["EntryFlags"]["LAST_ENTRY"]:
             break
 
@@ -190,8 +202,8 @@ def get_entries_in_slack(index_slack):
     for entry_offset in get_slack_entry_offsets(index_slack):
         index_slack_stream.seek(entry_offset)
 
-        with suppress(StreamError, CheckError, OverflowError, UnicodeDecodeError):
-            yield INDEX_ENTRY.parse_stream(index_slack_stream, is_slack=True)
+        with suppress(StreamError, ExplicitError, OverflowError, UnicodeDecodeError, InvalidFilenameError):
+            yield parse_index_entry(index_slack_stream, allocated=False)
 
 
 def remove_allocated_space(index_record, record_header):
@@ -204,7 +216,7 @@ def get_entries_in_record(index_record, key, record_header):
         yield from get_allocated_entries_in_record(index_record, record_header)
         remove_allocated_space(index_record, record_header)
 
-    except (StreamError, CheckError, OverflowError, UnicodeDecodeError):
+    except (StreamError, ExplicitError, OverflowError, UnicodeDecodeError, InvalidFilenameError):
         mft_index, _ = key
         warning(
             f"an error occurred while parsing an index record (file record {mft_index}). "
@@ -242,4 +254,4 @@ def get_index_entry_filename(entry):
 
 
 def is_slack(entry):
-    return entry["IsSlack"]
+    return not entry["IsAllocated"]

@@ -4,31 +4,29 @@
     05/16/2020
 """
 
+from construct import Struct, BitStruct, Nibble, BytesInteger, Const, Sequence, Select, RepeatUntil, Seek, this
 from io import BytesIO
-from construct import Struct, BitStruct, Nibble, BytesInteger, Const, StopIf, Optional, RepeatUntil, Seek
 
+END_MARKER = b"\x00"
 
 DATA_RUN = Struct(
-    "EndMark" / Optional(Const(b'\x00')),
-    StopIf(lambda this: this.EndMark is not None),
-
     "Header" / BitStruct(
         "Offset" / Nibble,
         "Length" / Nibble,
     ),
 
-    "Length" / BytesInteger(lambda this: this.Header.Length, swapped=True, signed=False),
-    "Offset" / BytesInteger(lambda this: this.Header.Offset, swapped=True, signed=True)
-)
+    "Length" / BytesInteger(this.Header.Length, swapped=True, signed=False),
+    "Offset" / BytesInteger(this.Header.Offset, swapped=True, signed=True)
+).compile()
 
-DATA_RUNS = Struct(
+DATA_RUNS = Sequence(
     Seek(lambda this: this._.dataruns_offset),
-    "DataRuns" / RepeatUntil(lambda obj, lst, ctx: obj.EndMark is not None, DATA_RUN)
+    RepeatUntil(lambda obj, lst, ctx: obj == END_MARKER, Select(Const(END_MARKER), DATA_RUN))
 )
 
 
 def get_dataruns(mft_chunk, offset):
-    return correct_offsets(DATA_RUNS.parse(mft_chunk, dataruns_offset=offset)["DataRuns"][:-1])
+    return correct_offsets(DATA_RUNS.parse(mft_chunk, dataruns_offset=offset)[1][:-1])
 
 
 def correct_offsets(dataruns):
