@@ -1,5 +1,5 @@
 # INDXRipper
-INDXRipper is a tool for carving file metadata from NTFS $I30 indexes. It's fast, and the output is easy to integrate into a timeline!
+INDXRipper is a tool for carving file metadata from NTFS $I30 indexes. It's (relatively) fast, and the output is easy to integrate into a timeline!
 
 ![screenshot](https://user-images.githubusercontent.com/84273110/118458300-42e4ae00-b703-11eb-8e59-bcb9de00ca89.png)
 
@@ -8,27 +8,30 @@ See: [The Sleuth Kit](https://github.com/sleuthkit/sleuthkit)
 
 ## Motivation
 
-In NTFS, $INDEX_ALLOCATION attributes are used to keep track of which files are in which folder. A folder's $INDEX_ALLOCATION attribute contains an entry for every file in that folder. Those entries are called index entries, and they contain some of the file's metadata:
+In NTFS, $INDEX_ALLOCATION attributes are used to keep track of which files are in which folder. A directory's $INDEX_ALLOCATION attribute contains an entry for every file in that directory. Those entries are called index entries, and they contain some of the file's metadata:
 * File name
 * File size
 * Allocated size of file (size on disk)
 * A set of MACB timestamps
 
-$INDEX_ALLOCATION attributes often contain a significant amount of slack space, which may contain index entries of deleted files. A file's index entry may last long after its MFT record is lost. Finding these index entries may help you prove a file existed on a system.
+$INDEX_ALLOCATION attributes often contain a significant amount of slack space, which may contain index entries of deleted files. A file's index entry may last long after its MFT record is lost. Finding index entries in slack space may help you prove a file existed on a system.
 
 For a more detailed explanation of this artifact, watch this 13Cubed episode:  
 https://www.youtube.com/watch?v=x-M-wyq3BXA
 
 ## Installation
-Using the Windows [packaged releases](https://github.com/harelsegev/INDXRipper/releases) is the easiest way to get started.
+Using the Windows [packaged releases](https://github.com/harelsegev/INDXRipper/releases) is the easiest way to get started. 
 
-### I use Linux
+
+### Creating a Development Environment
+Python 3.9 or above is required. INDXRipper should work with both the CPython and PyPy implementations. Although PyPy achieves better performance, it doesn't allow execution against mounted NTFS volumes on Windows.
+
 Clone the repository:
 ```bash
 git clone https://github.com/harelsegev/INDXRipper.git
 ```
 
-Python 3.9 or above is required. Create a virtualenv and use the package manager [pip](https://pip.pypa.io/en/stable/) to install construct:
+Create a virtualenv and use [pip](https://pip.pypa.io/en/stable/) to install construct:
 ```bash
 cd INDXRipper
 python3.9 -m pip install virtualenv
@@ -38,7 +41,7 @@ source venv/bin/activate
 
 pip install construct==2.10.68
 ```
-Run INDXRipper in the virtual environment:
+Execute INDXRipper in the virtual environment:
 ```bash
 # should print version information
 venv/bin/python INDXRipper.py -V
@@ -53,10 +56,10 @@ sudo venv/bin/python INDXRipper.py -V
 # process an image mounted and mapped as J: drive (Windows packaged version)
 INDXRipper.exe \\.\J: outfile.csv
 
-# process a full disk image, specifying the offset of the NTFS partition, in sectors
+# process a full disk image, specifying the offset of an NTFS partition, in sectors
 python INDXRipper.py -o 1026048 raw_disk.dd output.csv
 
-# process a partition image
+# process a partition image, specifying the offset isn't required
 python INDXRipper.py ntfs.001 output.csv
 
 # process the D: drive on a live system, --no-active-files mode, bodyfile output, prepend "D:" to all the paths
@@ -95,7 +98,7 @@ Note that the bodyfile format is specific to the sleuthkit and is not fully docu
 ### Basic features
 * Applies fixups for index records and MFT records
 * Handles attributes in extension records
-* Full file paths are resolved based on data from the MFT.
+* Full file paths are resolved based on data from the MFT
 * Works on live Windows NTFS drives, using device paths
 * All the outputted timestamps are in UTC
 
