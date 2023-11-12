@@ -103,8 +103,7 @@ def get_mft_records(mft_data_attribute, vbr):
         record_headers = get_record_headers(mft_chunk, vbr)
 
         for record_header in record_headers:
-            if record_header:
-                yield mft_chunk, record_header
+            yield mft_chunk, record_header
 
 
 def add_values_to_mft_dict(mft_dict, key, values):
