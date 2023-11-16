@@ -24,7 +24,7 @@ Using the Windows [packaged releases](https://github.com/harelsegev/INDXRipper/r
 
 
 ### Creating a Development Environment
-Python 3.9 or above is required. INDXRipper should work with both the CPython and PyPy implementations. Although PyPy achieves better performance, it doesn't allow execution against mounted NTFS volumes on Windows.
+Python 3.9 or above is required. INDXRipper should work with both the CPython and PyPy implementations. PyPy achieves better performance, but it doesn't allow execution against mounted NTFS volumes on Windows.
 
 Clone the repository:
 ```bash
@@ -39,7 +39,7 @@ python3.9 -m pip install virtualenv
 python3.9 -m virtualenv venv
 source venv/bin/activate
 
-pip install construct==2.10.68
+pip install construct==2.10.69
 ```
 Execute INDXRipper in the virtual environment:
 ```bash
@@ -59,7 +59,7 @@ INDXRipper.exe \\.\J: outfile.csv
 # process a full disk image, specifying the offset of an NTFS partition, in sectors
 python INDXRipper.py -o 1026048 raw_disk.dd output.csv
 
-# process a partition image, specifying the offset isn't required
+# process a partition image. specifying the offset isn't required
 python INDXRipper.py ntfs.001 output.csv
 
 # process the D: drive on a live system, --no-active-files mode, bodyfile output, prepend "D:" to all the paths

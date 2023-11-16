@@ -41,11 +41,11 @@ def get_arguments():
     parser = argparse.ArgumentParser(prog="INDXRipper",
                                      description=DESCRIPTION, formatter_class=argparse.RawDescriptionHelpFormatter)
 
-    parser.add_argument("image", help="image file path")
+    parser.add_argument("image", help="image file to process")
     parser.add_argument("outfile", help="output file path")
     parser.add_argument("-V", "--version", action="version", version=f"%(prog)s {__version__}")
 
-    parser.add_argument("-m", "--mount-point", default=".", help="a name to display as the mount point of the image")
+    parser.add_argument("-m", "--mount-point", default=".", help="a string to prepend to file paths, such as \"C:\"")
     parser.add_argument("-o", "--offset", type=int, default=0, help="offset to an NTFS partition, in sectors")
     parser.add_argument("-b", "--sector-size", type=int, default=512, help="sector size in bytes. default is 512")
     parser.add_argument("-f", "--output-format",
