@@ -10,7 +10,6 @@ from construct import Int8ul, Int16ul, Int32ul, Int64ul, Int8sl, this, ConstErro
 
 from dataruns import get_dataruns, NonResidentStream
 from sys import exit as sys_exit
-from contextlib import suppress
 from io import BytesIO
 
 
@@ -169,8 +168,11 @@ def get_record_headers(mft_chunk, vbr):
     for record_offset in range(0, vbr["BytsPerMftChunk"], vbr["BytsPerRec"]):
         mft_chunk_stream.seek(record_offset)
 
-        with suppress(ConstError):
+        try:
             yield FILE_RECORD_HEADER.parse_stream(mft_chunk_stream)
+
+        except ConstError:
+            yield None
 
 
 FIXUP_INTERVAL = 512
