@@ -3,7 +3,7 @@
     Author: Harel Segev
     05/16/2021
 """
-__version__ = "6.0.0"
+__version__ = "20231117"
 
 from contextlib import suppress
 import argparse
