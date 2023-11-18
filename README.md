@@ -3,7 +3,7 @@ INDXRipper is a tool for carving file metadata from NTFS $I30 indexes. It's (rel
 
 ![screenshot](https://github.com/harelsegev/INDXRipper/assets/84273110/922a682c-5365-4962-98d0-c7d49521d713)
 
-A snippet from a timeline created using mactime, INDXRipper and fls. The image used to create this timeline is included in [INDXRipper releases](https://github.com/harelsegev/INDXRipper/releases). Download it and try to [create the timeline yourself!](#-creating-a-super-timeline)
+A snippet from a timeline created using mactime, INDXRipper and fls. The image used to create this timeline is included in [INDXRipper releases](https://github.com/harelsegev/INDXRipper/releases). Download it and try to [create the timeline yourself!](#using-the-sleuth-kit)
 
 ## Motivation
 
