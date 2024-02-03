@@ -6,7 +6,7 @@
 
 from construct import Struct, Padding, Computed, IfThenElse, BytesInteger, Const, Switch, Tell, FlagsEnum
 from construct import Pointer, Seek, RepeatUntil, Adapter, Bytes, Select, Sequence, Enum, Array
-from construct import Int8ul, Int16ul, Int32ul, Int64ul, Int8sl, this, ConstError
+from construct import Int8ul, Int16ul, Int32ul, Int64ul, Int8sl, this, ConstError, StreamError
 
 from dataruns import get_dataruns, NonResidentStream
 from sys import exit as sys_exit
@@ -151,7 +151,11 @@ def get_boot_sector(raw_image, partition_offset):
         return BOOT_SECTOR.parse_stream(raw_image)
 
     except ConstError:
-        sys_exit("INDXRipper: error: invalid volume boot record")
+        sys_exit(f"INDXRipper: error: invalid volume boot record. "
+                 f"to process a full disk image, specify a partition offset")
+
+    except StreamError:
+        sys_exit("INDXRipper: error: failed to read a volume boot record at the provided offset")
 
 
 def get_mft_offset(vbr):
