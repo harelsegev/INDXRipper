@@ -164,12 +164,12 @@ def get_allocated_entries_in_record(index_record, record_header):
 
 TIMESTAMPS_OFFSET_IN_ENTRY = 24
 
-# TODO: Change me in 2026
+# TODO: Change me in 2040
 CARVER_QUERY = re.compile(
     b"(?=("
     
-    # 4 Timestamps: Sat 11 January 1997 20:42:45 UTC - Fri 19 June 2026 15:26:29 UTC
-    b"([\x00-\xFF]{6}[\xBC-\xDC]\x01){4}"
+    # 4 Timestamps: Sat 11 January 1997 20:42:45 UTC - Wed 26 September 2040 03:25:51 UTC
+    b"([\x00-\xFF]{6}[\xBC-\xEC]\x01){4}"
     
     # Allocated size: divisible by 8
     b"[\x00\x08\x10\x18\x20\x28\x30\x38\x40\x48\x50\x58\x60\x68\x70\x78"
